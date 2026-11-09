@@ -405,8 +405,47 @@
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
-    settings.apiKey = $('apiKey').value.trim(); settings.model = $('model').value; settings.effort = $('effort').value; saveSettings();
+    settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value; saveSettings();
   }
+  const KEY_RE = /sk-ant-[A-Za-z0-9_\-]{20,}/;
+  function keyMsg(ok, text) { const m = $('keyMsg'); m.className = ok ? 'okmsg' : 'errmsg'; m.textContent = text; }
+  function setKey(raw) {
+    const k = String(raw || '').replace(/\s+/g, '');
+    const found = k.match(KEY_RE);
+    $('apiKey').value = found ? found[0] : k;
+    if (found) keyMsg(true, '키를 넣었어요. 연결 테스트를 눌러 확인해 보세요.');
+    else keyMsg(false, 'sk-ant-로 시작하는 키가 아닌 것 같아요. 콘솔에서 키를 다시 복사해 주세요.');
+  }
+  $('btnPasteKey').addEventListener('click', async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (!t || !t.trim()) { keyMsg(false, '클립보드가 비어 있어요. 콘솔에서 키를 다시 복사해 주세요.'); return; }
+      setKey(t);
+    } catch (e) {
+      keyMsg(false, '클립보드를 읽을 수 없어요. 입력칸을 길게 눌러 붙여넣거나, 노트에 붙여넣고 아래 버튼을 써 주세요.');
+    }
+  });
+  $('apiKey').addEventListener('paste', () => setTimeout(() => setKey($('apiKey').value), 0));
+  $('btnShowKey').addEventListener('click', () => {
+    const on = $('apiKey').classList.toggle('masked');
+    $('btnShowKey').textContent = on ? '키 보기' : '키 숨기기';
+  });
+  $('btnKeyFromNote').addEventListener('click', () => {
+    // 노트들 가운데 키가 붙어 있는 곳을 찾아 가져오고, 노트에서는 바로 지운다
+    const all = [curNote(), ...V.notesSorted()].filter(Boolean);
+    for (const n of all) {
+      const src = n.id === S.cur ? bodyEl.value : (n.body || '');
+      const m = src.match(KEY_RE);
+      if (!m) continue;
+      setKey(m[0]);
+      const cleaned = src.replace(m[0], '').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+      n.body = cleaned; n.updatedAt = Date.now();
+      if (n.id === S.cur) bodyEl.value = cleaned;
+      db.put(n); renderEditorTop();
+      return;
+    }
+    keyMsg(false, '노트에서 키를 찾지 못했어요. 쓰기 화면의 노트에 키를 붙여넣은 뒤 다시 눌러 주세요.');
+  });
   dlg.addEventListener('close', () => { readSettingsForm(); V.renderResult(); processQueue(); });
   $('btnTestKey').addEventListener('click', async () => {
     readSettingsForm();

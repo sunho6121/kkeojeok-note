@@ -66,6 +66,11 @@ window.KK = window.KK || {};
       if (useLS) { const m = lsRead(); clean.forEach(d => { m[d.id] = d; }); lsWrite(m); return; }
       await run('readwrite', s => { clean.forEach(d => s.put(d)); });
     },
+    /* 녹음 파일처럼 Blob이 든 문서 — JSON으로 바꾸지 않고 그대로 저장 */
+    async putRaw(doc) {
+      if (useLS) throw new Error('이 브라우저에서는 파일을 저장할 수 없어요');
+      await run('readwrite', s => { s.put(doc); });
+    },
     async del(id) { return this.delMany([id]); },
     async delMany(ids) {
       if (!ids.length) return;

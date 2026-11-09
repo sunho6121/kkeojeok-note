@@ -74,7 +74,7 @@ window.KK = window.KK || {};
 
   function fail(code, message) { const e = new Error(message || code); e.code = code; return e; }
 
-  async function call({ apiKey, model, content, signal, maxTokens, withSchema, useFallback }) {
+  async function call({ apiKey, model, effort, content, signal, maxTokens, withSchema, useFallback }) {
     const headers = {
       'content-type': 'application/json',
       'x-api-key': apiKey,
@@ -84,7 +84,7 @@ window.KK = window.KK || {};
     const body = {
       model,
       max_tokens: maxTokens || 16000,
-      output_config: { effort: 'low' },
+      output_config: { effort: ['low', 'medium', 'high'].includes(effort) ? effort : 'high' },
       messages: [{ role: 'user', content }],
     };
     if (withSchema) body.output_config.format = { type: 'json_schema', schema: SCHEMA };
@@ -102,7 +102,7 @@ window.KK = window.KK || {};
     if (!res.ok) {
       const msg = (data && data.error && data.error.message) || ('HTTP ' + res.status);
       if (res.status === 400 && useFallback && /fallback|beta/i.test(msg)) {
-        return call({ apiKey, model, content, signal, maxTokens, withSchema, useFallback: false });
+        return call({ apiKey, model, effort, content, signal, maxTokens, withSchema, useFallback: false });
       }
       if (res.status === 401) throw fail('bad_key', msg);
       if (res.status === 403) throw fail('forbidden', msg);
@@ -127,12 +127,12 @@ window.KK = window.KK || {};
   }
 
   KK.claude = {
-    async organize({ apiKey, model, text, imageB64, signal }) {
+    async organize({ apiKey, model, effort, text, imageB64, signal }) {
       const content = [];
       if (imageB64) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageB64 } });
       content.push({ type: 'text', text: buildPrompt(text, !!imageB64) });
       const out = await call({
-        apiKey, model, content, signal, withSchema: true,
+        apiKey, model, effort, content, signal, withSchema: true,
         useFallback: FALLBACK_MODELS.includes(model),
       });
       if (out.stop === 'max_tokens') throw fail('bad_output', '메모가 너무 길어 결과가 잘렸어요');
@@ -157,7 +157,7 @@ window.KK = window.KK || {};
       };
     },
     async test({ apiKey, model }) {
-      const out = await call({ apiKey, model, content: [{ type: 'text', text: '연결 확인이야. "확인"이라고만 답해.' }], maxTokens: 2000 });
+      const out = await call({ apiKey, model, effort: 'low', content: [{ type: 'text', text: '연결 확인이야. "확인"이라고만 답해.' }], maxTokens: 2000 });
       return out.text;
     },
   };

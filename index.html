@@ -291,9 +291,16 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     </label>
     <label>모델
       <select id="model">
-        <option value="claude-opus-5-5">Claude Opus 5.5 · 가장 정확 (기본)</option>
-        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · 빠르고 정확</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · 빠르고 정확 (기본)</option>
+        <option value="claude-opus-5-5">Claude Opus 5.5 · 가장 정확</option>
         <option value="claude-haiku-5-5">Claude Haiku 5.5 · 가장 빠르고 저렴</option>
+      </select>
+    </label>
+    <label>정리 꼼꼼함
+      <select id="effort">
+        <option value="high">높음 · 꼼꼼하게 (기본)</option>
+        <option value="medium">보통</option>
+        <option value="low">낮음 · 빠르고 저렴하게</option>
       </select>
     </label>
     <div class="row"><button type="button" class="btn" id="btnTestKey">연결 테스트</button><span id="keyMsg"></span></div>

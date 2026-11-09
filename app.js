@@ -6,6 +6,7 @@
   const TRIGGERS = ['//', '@정리', '정리!!'];
 
   const S = { notes: new Map(), items: new Map(), cur: null, filter: 'all', day: null, q: '', busy: null, mode: 'type', lastDay: D.today() };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2 };
   const settings = loadSettings();
 
   /* ---------- 작은 도우미 ---------- */
@@ -35,8 +36,11 @@
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } }
   function loadSettings() {
-    try { return Object.assign({ apiKey: '', model: 'claude-opus-5-5' }, JSON.parse(lsGet('kk-settings', '{}'))); }
-    catch (e) { return { apiKey: '', model: 'claude-opus-5-5' }; }
+    let s;
+    try { s = JSON.parse(lsGet('kk-settings', '{}')) || {}; } catch (e) { s = {}; }
+    // v1에서 저장된 기본값(Opus)은 새 기본값(Sonnet 5.5 · 높음)으로 바꾼다. 키는 그대로 둔다.
+    if (s.v !== 2) { s.model = DEFAULTS.model; s.effort = DEFAULTS.effort; s.v = 2; }
+    return Object.assign({}, DEFAULTS, s);
   }
   function saveSettings() { lsSet('kk-settings', JSON.stringify(settings)); }
   const isWide = () => window.matchMedia('(min-width:1100px)').matches;
@@ -208,7 +212,7 @@
     const ctl = new AbortController();
     S.busy = { id: n.id, ctl }; setBusy(true, n);
     try {
-      const out = await KK.claude.organize({ apiKey: settings.apiKey, model: settings.model, text, imageB64, signal: ctl.signal });
+      const out = await KK.claude.organize({ apiKey: settings.apiKey, model: settings.model, effort: settings.effort, text, imageB64, signal: ctl.signal });
       const c = applyResult(n, out, hadInk);
       const parts = [];
       if (c.events) parts.push('약속 ' + c.events + '개');
@@ -289,7 +293,7 @@
     $('busy').hidden = !on;
     $('btnOrganize').disabled = !!on;
     $('btnOrganize').textContent = on ? '정리 중…' : '정리하기';
-    if (on) $('busyText').textContent = (n && n.id !== S.cur ? '「' + (n.title || '대기 노트') + '」 ' : '') + 'Claude가 메모를 읽고 있어요';
+    if (on) $('busyText').textContent = (n && n.id !== S.cur ? '「' + (n.title || '대기 노트') + '」 ' : '') + 'Claude가 메모를 꼼꼼히 읽고 있어요 · 길면 1분쯤 걸려요';
   }
 
   /* ---------- 렌더: 노트 목록 ---------- */
@@ -514,11 +518,11 @@
   /* ---------- 설정 ---------- */
   const dlg = $('dlgSettings');
   function openSettings() {
-    $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('keyMsg').textContent = '';
+    $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
-    settings.apiKey = $('apiKey').value.trim(); settings.model = $('model').value; saveSettings();
+    settings.apiKey = $('apiKey').value.trim(); settings.model = $('model').value; settings.effort = $('effort').value; saveSettings();
   }
   dlg.addEventListener('close', () => { readSettingsForm(); renderResult(); processQueue(); });
   $('btnTestKey').addEventListener('click', async () => {

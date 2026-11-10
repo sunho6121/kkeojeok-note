@@ -89,9 +89,18 @@
     recFrom = (startNote.body || '').length; // 녹음하는 동안 쓴 메모를 회의록 만들 때 함께 쓰려고
     mr.start(1000); recording = true; t0 = Date.now();
     try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; }
-    showBar('rec', '녹음 중 0:00');
-    $('voiceLive').textContent = '화면을 켜 둔 채로 두세요';
-    timer = setInterval(() => { $('voiceLabel').textContent = '녹음 중 ' + fmtDur(Math.round((Date.now() - t0) / 1000)); }, 500);
+    recMark(true);
+    timer = setInterval(() => recMark(true), 1000);
+  }
+  /* 녹음 중 표시: 위쪽 알림 줄 대신 녹음 버튼에 작은 빨간 점과 시간만 */
+  function recMark(on) {
+    const b = $('btnRecord'), lbl = $('recLbl');
+    b.classList.toggle('rec-on', on);
+    b.setAttribute('aria-pressed', String(on));
+    const t = on ? fmtDur(Math.round((Date.now() - t0) / 1000)) : '';
+    if (lbl) lbl.textContent = on ? t : '녹음';
+    b.setAttribute('aria-label', on ? '녹음 중 ' + t + ', 누르면 끝내기' : '녹음');
+    b.title = on ? '녹음 중 · 누르면 끝내요' : b.dataset.title || '녹음';
   }
   function stopRecording() {
     if (!recording) return;
@@ -99,7 +108,7 @@
     try { mr.stop(); } catch (e) { /* 무시 */ }
     if (stream) stream.getTracks().forEach(t => t.stop());
     try { if (wake) wake.release(); } catch (e) { /* 무시 */ }
-    wake = null; hideBar();
+    wake = null; recMark(false);
   }
   /* 끝나면 먼저 '임시 녹음'으로 보관하고(앱이 꺼져도 잃지 않게) 저장할지 묻는다 */
   async function finishRecording() {
@@ -292,7 +301,9 @@
   /* ---------- 버튼 연결 ---------- */
   $('btnDictate').addEventListener('click', () => (dictating ? stopDictation() : startDictation()));
   /* ---------- 녹음 버튼 → 기기의 음성 녹음 앱(갤럭시: 삼성 음성 녹음)으로 녹음하고 파일을 돌려받기 ---------- */
-  const isAndroid = /Android/i.test(navigator.userAgent);
+  const UA = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(UA) || (navigator.userAgentData && navigator.userAgentData.platform === 'Android') ||
+    (/Linux/i.test(UA) && !/CrOS/i.test(UA) && (navigator.maxTouchPoints || 0) > 1); // 태블릿 Chrome은 '데스크톱 버전'으로 열려 Linux로 보일 때가 많다
   const useRecorderApp = () => isAndroid && A().settings.recWith !== 'web';
   let appNote = null;
   function openRecorderApp() {
@@ -327,7 +338,16 @@
   });
   $('btnRecord').addEventListener('click', () => {
     if (recording) { stopRecording(); return; }
-    if (useRecorderApp()) openRecorderApp();
+    // 바로 시작하지 않고 한 번 묻는다
+    $('rqText').textContent = useRecorderApp()
+      ? '음성 녹음 앱이 열려요. 녹음을 마치면 끄적노트로 돌아와 저장할지 물어봐요.'
+      : '끄적노트 안에서 녹음해요. 녹음하는 동안 녹음 버튼에 작은 빨간 점이 보여요. 화면을 켜 둔 채로 두세요(앱을 닫으면 녹음이 멈춰요).';
+    $('dlgRecStart').showModal();
+  });
+  $('rqCancel').addEventListener('click', () => $('dlgRecStart').close());
+  $('rqGo').addEventListener('click', () => {
+    $('dlgRecStart').close();
+    if (useRecorderApp()) openRecorderApp(); // 이 누름으로 음성 녹음 앱을 연다
     else startRecording();
   });
   $('btnVoiceStop').addEventListener('click', () => { if (recording) stopRecording(); if (dictating) stopDictation(); });
@@ -335,7 +355,8 @@
   $('rsSave').addEventListener('click', confirmSave);
   $('rsDiscard').addEventListener('click', confirmDiscard);
 
-  if (isAndroid) $('btnRecord').title = '음성 녹음 앱으로 녹음 (설정에서 바꿀 수 있어요)';
+  $('btnRecord').dataset.title = isAndroid ? '음성 녹음 앱으로 녹음 (설정에서 바꿀 수 있어요)' : '소리를 녹음해 이 노트에 저장';
+  $('btnRecord').title = $('btnRecord').dataset.title;
   KK.voice = { refresh, renderList, isAndroid, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
 
   // 시작할 때: 저장 여부를 정하지 않은 녹음이 있으면 알려 준다

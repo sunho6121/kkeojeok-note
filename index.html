@@ -263,6 +263,10 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 @keyframes blink{50%{opacity:.25}}
 #btnDictate[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 #btnRecord[aria-pressed="true"]{background:var(--danger-soft);color:var(--danger)}
+.recdot{display:none;width:8px;height:8px;border-radius:50%;background:var(--danger);flex:none;animation:blink 1.2s ease-in-out infinite}
+#btnRecord.rec-on .recdot{display:inline-block}
+#btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
+#dlgRecStart{width:min(440px,calc(100vw - 32px))}
 @media (max-width:980px){.edbar .lbl{display:none}}
 .reclist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .reclist li{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px}
@@ -421,7 +425,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   #printArea .mdoc h1{font-size:20pt}
   #printArea .mdoc p{break-inside:avoid}
 }
-@media (prefers-reduced-motion:reduce){.busy .spin,.vdot,.mmsg .spin{animation:none}}
+@media (prefers-reduced-motion:reduce){.busy .spin,.vdot,.mmsg .spin,.recdot{animation:none}}
 </style>
 </head>
 <body data-view="write">
@@ -449,7 +453,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <button class="btn" id="btnPaste" title="복사해 둔 글이나 이미지를 노트에 붙여넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg><span class="lbl">붙여넣기</span></button>
     <div class="seg" role="group" aria-label="음성">
       <button id="btnDictate" aria-pressed="false" title="말하면 노트에 글자로 적혀요 (무료)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span class="lbl">받아쓰기</span></button>
-      <button id="btnRecord" aria-pressed="false" title="소리를 녹음해 이 노트에 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span class="lbl">녹음</span></button>
+      <button id="btnRecord" aria-pressed="false" title="소리를 녹음해 이 노트에 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span class="recdot" aria-hidden="true"></span><span class="lbl" id="recLbl">녹음</span></button>
       <button id="btnRecList" hidden title="이 노트의 녹음 듣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 5v14l11-7z"/></svg><span id="recCount"></span></button>
     </div>
     <div class="seg" role="group" aria-label="입력 방식">
@@ -651,6 +655,17 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="row" style="justify-content:space-between"><b style="font-size:14px">올릴 할 일</b><button type="button" class="linkbtn" id="bAll">모두 선택·해제</button></div>
     <div id="bList"></div>
     <div class="mrun"><button type="button" class="btn primary" id="bGo">보드에 올리기</button><span class="mmsg" id="bMsg"></span></div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecStart" aria-labelledby="rqHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="rqHead">녹음을 시작할까요?</h2>
+    <p id="rqText"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="rqCancel">취소</button>
+      <button type="button" class="btn primary" id="rqGo">녹음 시작</button>
+    </div>
   </form>
 </dialog>
 

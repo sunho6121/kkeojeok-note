@@ -87,7 +87,7 @@ body[data-view="write"] #vWrite,body[data-view="work"] #vWork,body[data-view="sc
 .mcard .row .btn{min-height:38px;padding:0 12px;font-size:14px}
 .mcard.done{opacity:.65}
 .ngroup h3{margin:0 0 6px;font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline}
-.ngroup ul{list-style:none;margin:0;padding:0;background:var(--sheet);border:1px solid var(--line);border-radius:12px}
+.ngroup ul,.mlist{list-style:none;margin:0;padding:0;background:var(--sheet);border:1px solid var(--line);border-radius:12px}
 .nrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-top:1px solid var(--line)}
 .nrow:first-child{border-top:0}
 .nrow.s-done .it-t,.nrow.s-cancel .it-t{text-decoration:line-through;color:var(--muted)}
@@ -486,7 +486,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="import-help" id="memoHint" hidden></div>
     <section class="msec">
       <h2 class="vh">중요 메모 <span class="when" id="memoCount"></span></h2>
-      <div class="mgrid" id="memoList"></div>
+      <div id="memoList"></div>
     </section>
     <section class="msec">
       <h2 class="vh">전달사항 <span class="when" id="noticeCount"></span></h2>

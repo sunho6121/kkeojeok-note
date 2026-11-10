@@ -355,17 +355,16 @@ window.KK = window.KK || {};
       .sort((a, b) => (b.priority === 'high') - (a.priority === 'high') || (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
     $('memoCount').textContent = mshow.length ? mshow.length + '개' : '';
     if (!mshow.length) mbox.append(h('p', { class: 'empty' }, showDone ? '보관한 메모가 없어요.' : '아직 중요 메모가 없어요. 노트에 결정된 내용·기준·숫자 같은 주요사항을 적고 정리하면 여기에 모여요.'));
-    mshow.forEach(it => {
-      const src = S.notes.get(it.noteId);
-      mbox.append(h('article', { class: 'mcard' + (it.priority === 'high' ? ' hi' : '') + (it.status === 'done' ? ' done' : '') },
-        h('div', { class: 'mt' }, it.priority === 'high' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger);margin-right:6px' }, '매우 중요') : null, h('span', null, it.title)),
-        lines(it.detail).length ? h('ul', { class: 'mdl' }, lines(it.detail).map(l => h('li', null, l))) : null,
-        h('div', { class: 'it-m' }, h('span', { class: 'when' }, D.short(it.updatedAt || it.createdAt)), src ? h('span', null, '· ' + noteLabel(src)) : null, it.locked ? h('span', null, '· 직접 정함') : null),
-        h('div', { class: 'row' },
-          h('button', { type: 'button', class: 'btn', onclick: () => A().setItemStatus(it, it.status === 'done' ? 'todo' : 'done') }, it.status === 'done' ? '다시 꺼내기' : '보관'),
-          src ? h('button', { type: 'button', class: 'btn', onclick: () => { A().openNote(src.id); A().setView('write'); } }, '노트로 가기') : null,
-          h('button', { type: 'button', class: 'btn danger', onclick: () => A().deleteItem(it) }, '삭제'))));
-    });
+    // 중요 메모: 전달사항처럼 한 줄씩 (네모를 누르면 보관, 줄을 누르면 노트로 가기·삭제)
+    if (mshow.length) mbox.append(h('ul', { class: 'mlist' }, mshow.map(it => {
+      const done = it.status === 'done', ls = lines(it.detail);
+      return h('li', { class: 'nrow s-' + (done ? 'done' : 'todo') },
+        h('button', { class: 'chk', 'aria-label': done ? '다시 꺼내기' : '보관하기', onclick: () => A().setItemStatus(it, done ? 'todo' : 'done') }, h('i', null, svg(ICON.check))),
+        h('button', { class: 'it-main', onclick: () => openItem(it) },
+          h('div', { class: 'it-t' }, it.title),
+          ls.length ? h('div', { class: 'it-m' }, h('span', null, ls.join(' · '))) : null),
+        it.priority === 'high' && !done ? h('span', { class: 'st late' }, '매우 중요') : h('span'));
+    })));
 
     // 전달사항: 대상별로 묶기
     const nbox = $('noticeList'); nbox.textContent = '';

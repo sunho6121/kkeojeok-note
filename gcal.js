@@ -13,7 +13,10 @@ window.KK = window.KK || {};
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 무시 */ } };
 
+  // 사용자 본인의 Google Cloud 프로젝트(sunho note)에서 만든 웹 클라이언트 ID — 공개돼도 되는 값
+  const DEFAULT_CLIENT_ID = '277084713279-0c5jubei6ki1h760rvtu4q5l2nommtm0.apps.googleusercontent.com';
   const cfg = Object.assign({ clientId: '', connected: false, autoPush: true, writeCal: 'primary', showCals: null, cals: [], lastSync: 0, needsAuth: false }, lsGet(LS_CFG, {}));
+  if (!cfg.clientId) cfg.clientId = DEFAULT_CLIENT_ID;
   const saveCfg = () => lsSet(LS_CFG, cfg);
   let token = null, tokenExp = 0;
   (() => { const t = lsGet(LS_TOK, null); if (t && t.exp > Date.now() + 60000) { token = t.token; tokenExp = t.exp; } })();

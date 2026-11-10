@@ -204,6 +204,16 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .stgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .stgrid button{min-height:52px;border-radius:12px;border:1px solid var(--line);font-size:16px;font-weight:600;background:var(--paper)}
 .stgrid button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.gbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px;color:var(--muted);background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 14px}
+.gbar .warn{color:var(--danger)}
+.linkbtn{color:var(--accent);font-weight:600;font-size:14px;min-height:36px;padding:0 6px;margin-left:auto}
+.dup{color:var(--accent);font-weight:600}
+.st.cal{color:var(--muted);border-style:dashed}
+.it.gcal .chk{color:var(--muted)}
+.it.gcal .chk svg{width:20px;height:20px;opacity:.8;color:var(--muted)}
+.day .pip.g{background:var(--muted)}
+.chkrow{display:flex !important;grid-template-columns:none;align-items:center;gap:10px;font-weight:400 !important;min-height:40px}
+.chkrow input{width:20px;height:20px;flex:none}
 .masked{-webkit-text-security:disc}
 .dlg input#apiKey{font-family:var(--f-mono);font-size:14px}
 .okmsg{color:var(--ok);font-size:14px}
@@ -289,6 +299,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 
 <main class="view" id="vSched" aria-label="일정">
   <div class="sched">
+    <div class="gbar" id="gbar" hidden></div>
     <div class="tiles" id="tiles"></div>
     <div class="ctrl">
       <div class="seg" role="group" aria-label="상태 보기" id="segStatus">
@@ -327,7 +338,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   <form method="dialog" class="dlg" id="itemForm">
     <h2 id="itTitle"></h2>
     <p id="itMeta"></p>
-    <div>
+    <div id="itStatusBox">
       <h3>상태</h3>
       <div class="stgrid" id="itStatus"></div>
       <p style="margin-top:8px">직접 바꾼 상태는 다시 정리해도 Claude가 바꾸지 않아요.</p>
@@ -389,6 +400,15 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="row"><button type="button" class="btn" id="btnTestKey">연결 테스트</button><span id="keyMsg"></span></div>
     <div class="sep"></div>
     <div>
+      <h3>구글 캘린더 연결</h3>
+      <p>연결하면 구글 캘린더(그룹웨어에서 동기화된 일정 포함)가 일정 탭에 함께 보이고, 정리한 일정은 구글 캘린더에 자동으로 들어가요. 같은 일정은 하나로 합쳐 보여 줘요. 캘린더 일정은 Claude에게 보내지 않아요.</p>
+    </div>
+    <label>구글 OAuth 클라이언트 ID
+      <input type="text" id="gClientId" placeholder="숫자-영문.apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <div id="gcalBox" style="display:grid;gap:8px"></div>
+    <div class="sep"></div>
+    <div>
       <h3>정리 신호</h3>
       <p>마지막 줄에 <code>//</code> 또는 <code>@정리</code> 만 쓰고 잠깐 멈추면 자동으로 정리돼요. 키보드가 있으면 <code>Ctrl</code>+<code>Enter</code>. 인터넷이 없을 때 신호를 주면 '정리 대기'로 표시했다가 연결되면 정리합니다.</p>
     </div>
@@ -412,6 +432,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="claude.js"></script>
 <script src="ui.js"></script>
 <script src="views.js"></script>
+<script src="gcal.js"></script>
 <script src="app.js"></script>
 <script src="voice.js"></script>
 <script src="search.js"></script>

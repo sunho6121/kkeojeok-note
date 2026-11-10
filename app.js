@@ -33,7 +33,10 @@
     document.body.dataset.view = v;
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.v === v ? 'page' : 'false'));
     if (v === 'write' && S.mode === 'pen') requestAnimationFrame(() => ink.resize());
-    if (v === 'sched') V.renderSched();
+    if (v === 'sched') {
+      V.renderSched();
+      if (KK.gcal && KK.gcal.ready() && KK.gcal.hasToken()) KK.gcal.fetchEvents().then(() => V.renderSched()).catch(() => {});
+    }
     if (v === 'notes') V.renderNotes();
     lsSet('kk-view', v);
   }
@@ -92,6 +95,7 @@
     if (!n) { toast('지울 노트가 없어요'); return; }
     const its = [...S.items.values()].filter(i => i.noteId === n.id);
     const inkDoc = { id: 'ink-' + n.id, kind: 'ink', strokes: ink.strokes().slice() };
+    if (KK.gcal) setTimeout(() => { if (!S.notes.has(n.id)) KK.gcal.removeOwned(its); }, 7000);
     S.notes.delete(n.id); its.forEach(i => S.items.delete(i.id));
     db.delMany([n.id, inkDoc.id, ...its.map(i => i.id)]);
     // 가져온 파일·녹음은 되돌리기 시간(6초)이 지난 뒤 지운다
@@ -231,6 +235,7 @@
         imageB64, file, existing: list, signal: ctl.signal,
       });
       const c = applyResult(n, out, hadInk, refMap, !!file);
+      if (KK.gcal) KK.gcal.syncSoon();
       const parts = [];
       if (c.added) parts.push('새 일정 ' + c.added + '개');
       if (c.updated) parts.push('바뀐 일정 ' + c.updated + '개');
@@ -338,11 +343,20 @@
     it.status = s; it.locked = true; it.statusAt = now; it.updatedAt = now;
     it.doneAt = s === 'done' ? now : 0;
     db.put(it); V.renderSched(); V.renderResult();
+    if (KK.gcal) KK.gcal.syncSoon();
   }
   function deleteItem(it) {
     it.deleted = true; it.deletedAt = Date.now();
     db.put(it); V.renderSched(); V.renderResult();
-    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); });
+    if (KK.gcal) KK.gcal.syncSoon();
+    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); if (KK.gcal) KK.gcal.syncSoon(); });
+  }
+  /* 캘린더(그룹웨어 등) 일정을 끄적노트에서 상태 관리하도록 가져온다 — 캘린더 쪽 일정은 건드리지 않음 */
+  function adoptEvent(ev) {
+    const now = Date.now();
+    const it = { id: 't-' + KK.uid(), kind: 'item', noteId: '', type: 'event', title: ev.title, date: ev.date, time: ev.time, endTime: ev.endTime, place: ev.place, priority: 'normal', detail: '', status: 'todo', locked: false, deleted: false, createdAt: now, updatedAt: now, doneAt: 0, gLinked: ev.calId + '|' + ev.id };
+    S.items.set(it.id, it); db.put(it); V.renderSched();
+    V.openItem(it);
   }
 
   /* ---------- 내보내기 ---------- */
@@ -402,6 +416,7 @@
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
+    V.renderGcalSettings();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
@@ -454,6 +469,15 @@
     msg.className = ''; msg.textContent = '확인 중…';
     try { await KK.claude.test({ apiKey: settings.apiKey, model: settings.model }); msg.className = 'okmsg'; msg.textContent = '연결됐어요.'; }
     catch (e) { msg.className = 'errmsg'; msg.textContent = errCopy(e); }
+  });
+  $('gClientId').addEventListener('change', e => {
+    const G = KK.gcal; if (!G) return;
+    const v = e.target.value.replace(/\s+/g, '');
+    if (v === G.cfg.clientId) return;
+    if (v && !/\.apps\.googleusercontent\.com$/.test(v)) { toast('클라이언트 ID는 .apps.googleusercontent.com 으로 끝나요. 다시 확인해 주세요.'); return; }
+    G.cfg.clientId = v; G.cfg.connected = false; G.saveCfg();
+    if (v) G.loadGIS().catch(() => {});
+    V.renderGcalSettings();
   });
   $('btnExport').addEventListener('click', exportBackup);
   $('btnImport').addEventListener('click', () => $('importFile').click());
@@ -603,7 +627,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, ensureNote, appendToNote, selectInNote, curNote };
+  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {
@@ -631,6 +655,7 @@
     setView('write');
     await takeShared();
     processQueue();
+    if (KK.gcal && KK.gcal.ready() && KK.gcal.hasToken()) KK.gcal.sync();
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(() => { /* 오프라인 캐시 없이도 동작 */ });
     }

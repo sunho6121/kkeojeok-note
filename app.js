@@ -359,12 +359,33 @@
     if (KK.gcal) KK.gcal.syncSoon();
     toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render(); if (KK.gcal) KK.gcal.syncSoon(); });
   }
+  /* 이번 달 노트를 Claude가 다시 읽고 전달사항·중요 메모(와 일정)를 뽑는다 — 다시 정리와 같음 */
+  async function extractMemos() {
+    if (S.extracting) return;
+    const cm = KK.work ? KK.work.curYM() : '';
+    flushSave();
+    const list = [...S.notes.values()].filter(n => !n.closed && (!cm || !n.month || n.month === cm) && ((n.body || '').trim() || n.hasInk));
+    if (!list.length) { toast('정리할 이번 달 노트 내용이 없어요. 쓰기 탭에서 먼저 적어 주세요.'); return; }
+    if (!settings.apiKey) { toast('Claude API 키가 필요해요.', '설정 열기', openSettings); return; }
+    if (!navigator.onLine) { toast('인터넷에 연결되어 있지 않아요.'); return; }
+    list.forEach(n => { n.pending = true; });
+    db.putMany(list);
+    S.extracting = true; V.renderMemo();
+    toast('노트 ' + list.length + '개를 Claude가 다시 읽고 있어요. 끝나면 여기에 모여요.');
+    try {
+      while (S.busy || queueRunning) await new Promise(r => setTimeout(r, 500));
+      await processQueue();
+    } finally { S.extracting = false; renderAll(); }
+    const n = [...S.items.values()].filter(i => !i.deleted && (i.type === 'notice' || i.type === 'memo')).length;
+    toast(n ? '전달사항·중요 메모 ' + n + '건을 정리했어요' : '노트에서 전달할 것·기억할 것을 찾지 못했어요', null, null, 6000);
+  }
+
   /* 전달사항·중요 메모를 Claude가 개조식으로 간결하게 다듬는다 (지금 보이는 것만, 되돌리기 가능) */
   async function polishMemos() {
     if (S.polishing) return;
     const list = [...S.items.values()].filter(i => !i.deleted && (
       (i.type === 'notice' && ['todo', 'doing', 'hold'].includes(i.status || 'todo')) || (i.type === 'memo' && i.status !== 'done')));
-    if (!list.length) { toast('다듬을 전달사항·메모가 없어요'); return; }
+    if (!list.length) { extractMemos(); return; } // 다듬을 게 없으면 노트에서 먼저 뽑는다
     if (!settings.apiKey) { toast('다듬으려면 Claude API 키가 필요해요.', '설정 열기', openSettings); return; }
     if (!navigator.onLine) { toast('인터넷에 연결되어 있지 않아요.'); return; }
     S.polishing = true; V.renderMemo();
@@ -839,7 +860,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll };
+  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {

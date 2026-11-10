@@ -234,11 +234,22 @@
         createdAt: now, updatedAt: now, doneAt: 0, source: 'minutes', recId: r.id,
       });
     });
+    // 결정사항 → 중요 메모 (회의에서 정해진 것)
+    (m.decisions || []).forEach(t => {
+      const title = String(t).trim().slice(0, 60);
+      if (!title || have.has(norm(title))) return;
+      have.add(norm(title));
+      docs.push({
+        id: 't-' + KK.uid(), kind: 'item', noteId, type: 'memo', title, date: '', time: '', endTime: '', place: '', to: '',
+        priority: 'normal', detail: '회의 결정 · ' + (m.title || r.name || ''), status: 'todo', locked: false, deleted: false,
+        createdAt: now, updatedAt: now, doneAt: 0, source: 'minutes', recId: r.id,
+      });
+    });
     docs.forEach(d => S.items.set(d.id, d));
     if (docs.length) db.putMany(docs);
     if (A().renderAll) A().renderAll();
     if (KK.gcal && docs.some(d => d.date)) KK.gcal.syncSoon();
-    return docs.length;
+    return docs.filter(d => d.type === 'task').length;
   }
 
   async function run() {

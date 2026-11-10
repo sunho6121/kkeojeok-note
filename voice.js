@@ -77,7 +77,8 @@
     if (dictating) stopDictation();
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
     catch (e) { toast('마이크 권한이 필요해요. 앱 정보 → 권한에서 마이크를 허용해 주세요.', null, null, 8000); return; }
-    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+    // 다른 앱(삼성 음성 녹음·삼성 노트 등)과 잘 맞는 m4a(AAC)를 먼저, 안 되면 webm
+    const mime = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m)) || '';
     try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
     catch (e) { stream.getTracks().forEach(t => t.stop()); toast('녹음을 시작하지 못했어요.'); return; }
     chunks = [];
@@ -245,6 +246,7 @@
       acts.append(...[
         h('button', { type: 'button', class: 'btn', onclick: () => KK.minutes.open(r) }, svg(ICON.note), r.minutes ? '회의록 보기' : '회의록 만들기'),
         h('button', { type: 'button', class: 'btn', onclick: () => rename(li, r, list) }, '이름 바꾸기'),
+        r.blob ? h('button', { type: 'button', class: 'btn', onclick: () => shareRec(r, fileName) }, '공유') : null,
         r.blob ? h('button', { type: 'button', class: 'btn', onclick: () => download(r, fileName) }, '파일로 받기') : null,
         h('button', { type: 'button', class: 'btn danger', onclick: async () => {
           await db.del(r.id); await refresh(); renderList();
@@ -267,6 +269,18 @@
     input.focus(); input.select();
   }
 
+  /* 다른 앱으로 보내기 (카톡·드라이브·삼성 노트 등). 공유가 안 되는 기기면 파일로 받는다 */
+  async function shareRec(r, fileName) {
+    const type = /mp4/.test(r.mime || '') ? 'audio/mp4' : String(r.blob.type || r.mime || 'audio/webm').split(';')[0];
+    const file = new File([r.blob], fileName, { type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: r.name || '녹음' }); }
+      catch (e) { if (e.name !== 'AbortError') download(r, fileName); }
+    } else {
+      download(r, fileName);
+      toast('이 기기에서는 바로 공유가 안 돼서 다운로드 폴더에 저장했어요. 다른 앱에서 그 파일을 열어 주세요.', null, null, 7000);
+    }
+  }
   function download(r, fileName) {
     const url = URL.createObjectURL(r.blob);
     const a = document.createElement('a');

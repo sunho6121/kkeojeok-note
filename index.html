@@ -483,6 +483,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       </div>
       <button class="btn" id="btnPolish" title="전달사항·중요 메모를 Claude가 핵심만 남겨 개조식으로 다시 써요">간결하게 다듬기</button>
     </div>
+    <div class="import-help" id="memoHint" hidden></div>
     <section class="msec">
       <h2 class="vh">중요 메모 <span class="when" id="memoCount"></span></h2>
       <div class="mgrid" id="memoList"></div>
@@ -500,6 +501,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <div><b>긴 회의 녹음은 삼성 '음성 녹음' 앱을 추천해요.</b> 화면을 꺼도 계속 녹음되고, Galaxy AI 텍스트 변환으로 글로 바꿀 수 있어요.</div>
       <div>음성 녹음 앱에서 변환한 글(녹음 파일과 함께 또는 따로)을 <b>공유 → 끄적노트</b>로 보내면, 여기 녹음에 묶이고 <b>회의록이 자동으로 만들어져요</b>. 향후조치는 <b>업무 탭 할 일</b>로 들어가요.</div>
       <div>회의록은 녹음 카드의 <b>회의록 보기</b>에서 고쳐 쓰고 한글·Word·PDF로 받을 수 있어요. 끄적노트의 녹음 버튼도 녹음은 되지만, 글로 바꾸는 기능은 없어서 회의록에는 녹음 중 쓴 메모만 들어가요.</div>
+      <div>끄적노트 녹음은 <b>앱 안에 저장</b>돼서 다른 앱에는 보이지 않아요. 다른 앱에서 쓰려면 녹음 카드의 <b>공유</b>나 <b>파일로 받기</b>(다운로드 폴더)를 쓰세요.</div>
     </div>
     <div id="recView" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
@@ -650,7 +652,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <p>노트는 달마다 새로 시작해요. 달이 바뀌면 안 끝난 일을 새 달 노트로 넘기고, 지난달 업무를 Claude가 요약해 업무 탭에 보여 줘요.</p>
     </div>
     <label class="chkrow" for="setAutoMin"><input type="checkbox" id="setAutoMin"> 녹취 글을 공유받으면 회의록을 자동으로 만들기</label>
-    <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치를 업무 탭 할 일로 넣기</label>
+    <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치는 업무 할 일로, 결정사항은 중요 메모로 넣기</label>
     <div class="sep"></div>
     <div>
       <h3>노트 관리 · 백업</h3>

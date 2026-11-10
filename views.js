@@ -336,6 +336,16 @@ window.KK = window.KK || {};
     const all = liveItems();
     const memos = all.filter(i => i.type === 'memo');
     const notices = all.filter(i => i.type === 'notice');
+    // 하나도 없으면: 예전에 정리한 노트에는 전달·메모가 없을 수 있으니, 노트를 다시 읽어 뽑는 버튼을 보여 준다
+    const hint = $('memoHint'); hint.textContent = '';
+    const extracting = !!S.extracting;
+    if (!showDone && (extracting || (!memos.length && !notices.length))) {
+      hint.hidden = false;
+      if (extracting) hint.append(h('p', { class: 'mmsg' }, h('span', { class: 'spin' }), 'Claude가 이번 달 노트를 읽고 전달할 것·기억할 것을 뽑고 있어요…'));
+      else hint.append(
+        h('div', null, h('b', null, '아직 전달사항·중요 메모가 없어요.'), ' 이 기능이 생기기 전에 정리한 노트에는 없을 수 있어요. Claude가 이번 달 노트를 다시 읽고 전달할 것·기억할 것을 뽑아 개조식으로 정리해 드려요.'),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary', onclick: () => A().extractMemos() }, '노트에서 뽑아 정리하기')));
+    } else hint.hidden = true;
     const openN = notices.filter(i => ['todo', 'doing'].includes(i.status || 'todo'));
     $('memoTabCnt').textContent = String(openN.length || '');
 

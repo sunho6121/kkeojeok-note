@@ -1,5 +1,5 @@
 /* 끄적노트 — 오프라인 캐시 + 공유받기. 앱 파일을 고치면 VERSION 숫자를 올리세요. */
-const VERSION = 'kk-v11';
+const VERSION = 'kk-v12';
 const SHELL = [
   './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'work.js', 'app.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'search.js',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',

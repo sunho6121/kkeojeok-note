@@ -38,6 +38,8 @@
       if (KK.gcal && KK.gcal.ready() && KK.gcal.hasToken()) KK.gcal.fetchEvents().then(() => V.renderSched()).catch(() => {});
     }
     if (v === 'notes') V.renderNotes();
+    if (v === 'rec' && KK.voice) KK.voice.renderList();
+    if (v !== 'rec') S.recNote = null;
     lsSet('kk-view', v);
   }
 
@@ -549,18 +551,47 @@
     S.notes.set(n.id, n);
     return n;
   }
+  function audioDuration(blob) {
+    return new Promise(res => {
+      const url = URL.createObjectURL(blob), au = new Audio();
+      const done = v => { URL.revokeObjectURL(url); res(v); };
+      const t = setTimeout(() => done(0), 4000);
+      au.preload = 'metadata';
+      au.onloadedmetadata = () => { clearTimeout(t); done(isFinite(au.duration) ? Math.round(au.duration) : 0); };
+      au.onerror = () => { clearTimeout(t); done(0); };
+      au.src = url;
+    });
+  }
+  const AUDIO_EXT = ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'opus', 'webm', '3gp', 'amr'];
   async function importFiles(files, shared) {
     flushSave();
     const made = [], skipped = [];
+    let recs = 0, appended = false;
     if (shared && shared.text && shared.text.trim()) {
-      const n = newImportedNote(shared.title || '', shared.text.trim());
-      await db.put(n); made.push(n);
+      const cur = curNote();
+      if (cur && !files.length) {
+        // 음성 녹음 앱의 변환 글처럼 글만 공유되면 지금 쓰는 노트에 이어 붙인다
+        appendToNote('\n[공유받은 글 · ' + D.stamp(Date.now()) + ']' + (shared.title ? ' ' + shared.title : '') + '\n' + shared.text.trim());
+        cur.pending = true; db.put(cur); appended = true;
+      } else {
+        const n = newImportedNote(shared.title || '', shared.text.trim());
+        await db.put(n); made.push(n);
+      }
     }
     for (const f of files) {
       const name = (f.name || '').replace(/\.[^.]+$/, '') || '삼성 노트';
       const ext = ((f.name || '').split('.').pop() || '').toLowerCase();
       const type = f.type || '';
       try {
+        if (type.startsWith('audio/') || AUDIO_EXT.includes(ext)) {
+          // 음성 녹음 앱 등에서 보낸 녹음 파일 → 지금 노트에 붙은 녹음으로 보관
+          if (db.usingFallback) { skipped.push(f.name); continue; }
+          const target = ensureNote();
+          const rec = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: target.id, createdAt: f.lastModified || Date.now(), duration: await audioDuration(f), mime: type || 'audio/mp4', size: f.size, name: name || '녹음 파일', draft: false, blob: f };
+          await db.putRaw(rec); recs++;
+          if (target.id === S.cur) appendToNote('[녹음 파일 · ' + rec.name + ']');
+          continue;
+        }
         if (type.startsWith('text/') || ext === 'txt') {
           const n = newImportedNote(name, (await f.text()).trim());
           await db.put(n); made.push(n);
@@ -576,11 +607,19 @@
         } else skipped.push(f.name);
       } catch (e) { skipped.push(f.name); }
     }
+    const tail = settings.apiKey ? (navigator.onLine ? ' · 정리를 시작해요' : ' · 인터넷이 연결되면 정리해요') : ' · API 키를 넣으면 정리돼요';
+    if (recs && KK.voice) KK.voice.refresh();
     if (made.length) {
       S.cur = null; openNote(made[made.length - 1].id); renderAll(); setView('write');
-      const tail = settings.apiKey ? (navigator.onLine ? ' · 정리를 시작해요' : ' · 인터넷이 연결되면 정리해요') : ' · API 키를 넣으면 정리돼요';
-      toast(made.length + '개 노트를 가져왔어요' + tail + (skipped.length ? ' (못 읽은 파일 ' + skipped.length + '개)' : ''), null, null, 6000);
+      toast(made.length + '개 노트를 가져왔어요' + tail + (recs ? ' · 녹음 ' + recs + '개 보관' : '') + (skipped.length ? ' (못 읽은 파일 ' + skipped.length + '개)' : ''), null, null, 6000);
       processQueue();
+    } else if (appended || recs) {
+      renderAll(); setView(appended ? 'write' : 'rec');
+      const parts = [];
+      if (appended) parts.push('공유받은 글을 지금 노트에 붙였어요' + tail);
+      if (recs) parts.push('녹음 ' + recs + '개를 녹음 탭에 보관했어요');
+      toast(parts.join(' · '), recs && appended ? '녹음 탭' : null, () => setView('rec'), 7000);
+      if (appended) processQueue();
     } else if (skipped.length) {
       toast('읽을 수 없는 파일이에요. 삼성 노트에서 PDF나 텍스트 파일로 공유해 주세요.', null, null, 6000);
     }

@@ -1,11 +1,13 @@
 'use strict';
-/* 끄적노트 — 받아쓰기(기기 음성 인식, 무료)와 녹음(노트에 소리 파일 저장) */
+/* 끄적노트 — 받아쓰기(기기 음성 인식, 무료) · 녹음(끝나면 저장 여부 확인) · 녹음 탭 */
 (function () {
-  const { $, h, toast } = KK.ui;
+  const { $, h, svg, ICON, toast } = KK.ui;
   const D = KK.date, db = KK.db;
   const A = () => KK.app;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const fmtDur = s => Math.floor(s / 60) + ':' + D.pad(s % 60);
+  const fmtSize = b => (b > 1048576 ? (b / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB');
+  const defaultName = t => '녹음 ' + D.stamp(t);
 
   function showBar(kind, label) {
     $('vbar').className = 'busy vbar' + (kind === 'dict' ? ' dict' : '');
@@ -45,20 +47,19 @@
           if (!t) continue;
           const now = Date.now();
           if (!started) { A().appendToNote('[받아쓰기 · ' + D.stamp(now) + ']'); started = true; A().appendToNote(t); }
-          else if (now - lastFinal > 4000) A().appendToNote(t);   // 잠깐 쉬면 새 줄
-          else A().appendToNote(t, true);                         // 이어 말하면 같은 줄
+          else if (now - lastFinal > 4000) A().appendToNote(t);
+          else A().appendToNote(t, true);
           lastFinal = now;
         } else interim += r[0].transcript;
       }
       $('voiceLive').textContent = interim || '듣고 있어요…';
     };
     sr.onerror = e => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        stopDictation(); toast('마이크 권한이 필요해요. 앱 정보 → 권한에서 마이크를 허용해 주세요.', null, null, 8000);
-      } else if (e.error === 'network') { stopDictation(); toast('받아쓰기는 인터넷 연결이 필요해요.'); }
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { stopDictation(); toast('마이크 권한이 필요해요. 앱 정보 → 권한에서 마이크를 허용해 주세요.', null, null, 8000); }
+      else if (e.error === 'network') { stopDictation(); toast('받아쓰기는 인터넷 연결이 필요해요.'); }
       else if (e.error === 'language-not-supported') { stopDictation(); toast('이 기기에서 한국어 음성 인식을 쓸 수 없어요.'); }
     };
-    sr.onend = () => { if (dictating) { try { listen(); } catch (err) { stopDictation(); } } }; // 말이 멈추면 자동으로 끝나므로 다시 듣기
+    sr.onend = () => { if (dictating) { try { listen(); } catch (err) { stopDictation(); } } };
     try { sr.start(); } catch (e) { stopDictation(); }
   }
   function stopDictation() {
@@ -80,7 +81,7 @@
     catch (e) { stream.getTracks().forEach(t => t.stop()); toast('녹음을 시작하지 못했어요.'); return; }
     chunks = [];
     mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    mr.onstop = saveRecording;
+    mr.onstop = finishRecording;
     recNote = A().ensureNote().id;
     mr.start(1000); recording = true; t0 = Date.now();
     try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; }
@@ -96,61 +97,183 @@
     try { if (wake) wake.release(); } catch (e) { /* 무시 */ }
     wake = null; hideBar();
   }
-  async function saveRecording() {
+  /* 끝나면 먼저 '임시 녹음'으로 보관하고(앱이 꺼져도 잃지 않게) 저장할지 묻는다 */
+  async function finishRecording() {
     const type = (mr && mr.mimeType) || 'audio/webm';
     const blob = new Blob(chunks, { type }); chunks = [];
     const dur = Math.max(1, Math.round((Date.now() - t0) / 1000));
     if (!blob.size) { toast('녹음된 소리가 없어요.'); return; }
-    const doc = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: recNote, createdAt: t0, duration: dur, mime: type, blob };
-    try { await db.putRaw(doc); } catch (e) { toast('녹음을 저장하지 못했어요. 저장 공간을 확인해 주세요.'); return; }
-    if (A().S.cur === recNote) A().appendToNote('[녹음 · ' + D.stamp(t0) + ' · ' + fmtDur(dur) + ']');
-    await refresh();
-    toast('녹음을 저장했어요 (' + fmtDur(dur) + ')', '듣기', openList);
+    const doc = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: recNote, createdAt: t0, duration: dur, mime: type, size: blob.size, name: defaultName(t0), draft: true, blob };
+    try { await db.putRaw(doc); } catch (e) { toast('녹음을 보관하지 못했어요. 저장 공간을 확인해 주세요.'); return; }
+    askSave(doc);
   }
-  document.addEventListener('visibilitychange', () => {
-    // 화면이 다시 보이면 끊긴 화면 켜짐 유지를 다시 요청
-    if (document.visibilityState === 'visible' && recording && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { wake = w; }).catch(() => {});
-  });
 
-  /* ---------- 녹음 목록 ---------- */
-  async function recsOf(noteId) {
-    if (!noteId || db.usingFallback) return [];
-    return (await db.all()).filter(d => d.kind === 'rec' && d.noteId === noteId).sort((a, b) => b.createdAt - a.createdAt);
+  /* ---------- 저장 여부 확인 ---------- */
+  let asking = null, askUrl = null, discardArmed = false;
+  function askSave(doc) {
+    asking = doc; discardArmed = false;
+    if (askUrl) URL.revokeObjectURL(askUrl);
+    askUrl = URL.createObjectURL(doc.blob);
+    const n = A().S.notes.get(doc.noteId);
+    $('rsMeta').textContent = '길이 ' + fmtDur(doc.duration) + ' · ' + fmtSize(doc.size) + (n ? ' · 「' + KK.views.noteLabel(n) + '」 노트에 붙어요' : '');
+    $('rsAudio').src = askUrl;
+    $('rsName').value = doc.name;
+    $('rsDiscard').textContent = '저장 안 함';
+    if (!$('dlgRecSave').open) $('dlgRecSave').showModal();
+  }
+  async function confirmSave() {
+    const doc = asking; if (!doc) return;
+    doc.name = $('rsName').value.trim() || defaultName(doc.createdAt);
+    doc.draft = false;
+    try { await db.putRaw(doc); } catch (e) { toast('녹음을 저장하지 못했어요.'); return; }
+    closeAsk();
+    const line = '[녹음 · ' + doc.name + ' · ' + fmtDur(doc.duration) + ']';
+    const S = A().S, n = S.notes.get(doc.noteId);
+    if (n) {
+      if (S.cur === n.id) A().appendToNote(line);
+      else { n.body = (n.body || '').replace(/\s+$/, '') + '\n' + line; n.updatedAt = Date.now(); db.put(n); }
+    }
+    await refresh();
+    toast('녹음을 저장했어요 · 녹음 탭에서 들을 수 있어요', '녹음 탭', () => A().setView('rec'));
+  }
+  async function confirmDiscard() {
+    const doc = asking; if (!doc) return;
+    if (!discardArmed) { discardArmed = true; $('rsDiscard').textContent = '정말 버릴까요? 한 번 더 누르세요'; return; }
+    await db.del(doc.id);
+    closeAsk(); await refresh();
+    toast('녹음을 저장하지 않았어요');
+  }
+  function closeAsk() {
+    asking = null;
+    $('rsAudio').pause(); $('rsAudio').removeAttribute('src');
+    if (askUrl) { URL.revokeObjectURL(askUrl); askUrl = null; }
+    $('dlgRecSave').close();
+  }
+  // 뒤로 가기로 닫으면 녹음이 어중간하게 남지 않도록, 저장/저장 안 함 중 고르게 한다
+  $('dlgRecSave').addEventListener('cancel', e => { e.preventDefault(); toast('녹음을 저장할지 골라 주세요'); });
+
+  /* ---------- 녹음 탭 ---------- */
+  async function allRecs() {
+    if (db.usingFallback) return [];
+    return (await db.all()).filter(d => d.kind === 'rec').sort((a, b) => b.createdAt - a.createdAt);
   }
   async function refresh() {
-    const list = await recsOf(A().S.cur);
-    $('btnRecList').hidden = !list.length;
-    $('recCount').textContent = list.length ? String(list.length) : '';
-    $('btnRecList').setAttribute('aria-label', '이 노트의 녹음 ' + list.length + '개 듣기');
-  }
-  let urls = [];
-  async function openList() {
-    urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
-    const ul = $('recList'); ul.textContent = '';
-    const list = await recsOf(A().S.cur);
-    if (!list.length) ul.append(h('li', { class: 'empty' }, '이 노트에는 녹음이 없어요.'));
-    list.forEach(r => {
-      const url = URL.createObjectURL(r.blob); urls.push(url);
-      const ext = /mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm';
-      const name = '끄적노트-녹음-' + D.ymd(new Date(r.createdAt)) + '-' + D.pad(new Date(r.createdAt).getHours()) + D.pad(new Date(r.createdAt).getMinutes()) + '.' + ext;
-      ul.append(h('li', null,
-        h('div', { class: 'row' }, h('b', null, D.stamp(r.createdAt)), h('span', { class: 'when' }, fmtDur(r.duration || 0))),
-        h('audio', { controls: true, preload: 'metadata', src: url }),
-        h('div', { class: 'row' },
-          h('a', { class: 'btn', href: url, download: name }, '파일로 받기'),
-          h('button', { type: 'button', class: 'btn danger', onclick: async () => {
-            await db.del(r.id); await refresh(); openList();
-            toast('녹음을 지웠어요', '되돌리기', async () => { await db.putRaw(r); await refresh(); });
-          } }, '삭제'))));
-    });
-    if (!$('dlgRec').open) $('dlgRec').showModal();
+    const list = await allRecs();
+    const mine = list.filter(r => r.noteId === A().S.cur && !r.draft);
+    $('btnRecList').hidden = !mine.length;
+    $('recCount').textContent = mine.length ? String(mine.length) : '';
+    $('btnRecList').setAttribute('aria-label', '이 노트의 녹음 ' + mine.length + '개 보기');
+    const drafts = list.filter(r => r.draft).length;
+    $('recTabCnt').textContent = drafts ? String(drafts) : '';
+    if (document.body.dataset.view === 'rec') renderList(list);
   }
 
+  let urls = [], recQ = '';
+  async function renderList(given) {
+    urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
+    const S = A().S, V = KK.views;
+    const list = given || await allRecs();
+    const box = $('recView'); box.textContent = '';
+    const total = list.reduce((s, r) => s + (r.size || (r.blob && r.blob.size) || 0), 0);
+    const filterNote = S.recNote && S.notes.get(S.recNote);
+    const head = h('div', { class: 'rhead' },
+      h('input', { class: 'search', id: 'recSearch', type: 'search', placeholder: '녹음 이름·노트로 찾기', value: recQ, oninput: e => { recQ = e.target.value; renderList(list); setTimeout(() => { const s = $('recSearch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }, 0); } }),
+      h('span', { class: 'when' }, '녹음 ' + list.filter(r => !r.draft).length + '개 · ' + fmtSize(total)));
+    box.append(head);
+    if (filterNote) box.append(h('div', { class: 'rfilter' }, '「' + V.noteLabel(filterNote) + '」 노트의 녹음만 보는 중',
+      h('button', { class: 'linkbtn', onclick: () => { S.recNote = null; renderList(list); } }, '전체 보기')));
+    const q = recQ.trim().toLowerCase();
+    const shown = list.filter(r => (!filterNote || r.noteId === S.recNote) &&
+      (!q || [r.name, V.noteLabel(S.notes.get(r.noteId))].join(' ').toLowerCase().includes(q)));
+    if (!shown.length) {
+      box.append(h('div', { class: 'empty' },
+        h('p', null, list.length ? '조건에 맞는 녹음이 없어요.' : '아직 녹음이 없어요.'),
+        list.length ? null : h('p', null, '쓰기 화면 위쪽의 녹음 버튼을 누르면 녹음이 시작되고, 끝낼 때 저장할지 물어봐요.')));
+      return;
+    }
+    let lastDay = '';
+    let ul = null;
+    shown.forEach(r => {
+      const day = D.ymd(new Date(r.createdAt));
+      if (day !== lastDay) {
+        lastDay = day;
+        box.append(h('h3', { class: 'rday' }, D.dayLabel(day)));
+        ul = h('ul', { class: 'reclist' }); box.append(ul);
+      }
+      ul.append(card(r, list));
+    });
+  }
+
+  function card(r, list) {
+    const S = A().S, V = KK.views;
+    const n = S.notes.get(r.noteId);
+    const t = new Date(r.createdAt);
+    const ext = /mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm';
+    const fileName = (r.name || defaultName(r.createdAt)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
+    const li = h('li', { class: 'rcard' + (r.draft ? ' draft' : '') });
+    const title = h('div', { class: 'rtitle' }, h('b', null, r.name || defaultName(r.createdAt)),
+      r.draft ? h('span', { class: 'chip new' }, '저장 확인 안 됨') : null);
+    const meta = h('div', { class: 'it-m' },
+      h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || (r.blob && r.blob.size) || 0)),
+      n ? h('button', { class: 'linkbtn', style: 'margin-left:0;min-height:28px', onclick: () => { A().openNote(n.id); A().setView('write'); } }, '노트: ' + V.noteLabel(n)) : h('span', null, '노트 없음'));
+    const player = h('div', { class: 'rplayer' });
+    const playBtn = h('button', { type: 'button', class: 'btn primary', onclick: () => {
+      const url = URL.createObjectURL(r.blob); urls.push(url);
+      player.textContent = '';
+      const au = h('audio', { controls: true, src: url, preload: 'auto' });
+      player.append(au); au.play().catch(() => {});
+      playBtn.hidden = true;
+    } }, svg('<path d="M8 5v14l11-7z"/>'), '듣기');
+    const acts = h('div', { class: 'row' }, playBtn);
+    if (r.draft) {
+      acts.append(
+        h('button', { type: 'button', class: 'btn', onclick: () => askSave(r) }, '저장할지 정하기'));
+    } else {
+      acts.append(
+        h('button', { type: 'button', class: 'btn', onclick: () => rename(li, r, list) }, '이름 바꾸기'),
+        h('button', { type: 'button', class: 'btn', onclick: () => download(r, fileName) }, '파일로 받기'),
+        h('button', { type: 'button', class: 'btn danger', onclick: async () => {
+          await db.del(r.id); await refresh(); renderList();
+          toast('「' + (r.name || '녹음') + '」을(를) 지웠어요', '되돌리기', async () => { await db.putRaw(r); await refresh(); renderList(); });
+        } }, '삭제'));
+    }
+    li.append(title, meta, player, acts);
+    return li;
+  }
+
+  function rename(li, r, list) {
+    const input = h('input', { type: 'text', class: 'search', value: r.name || '', 'aria-label': '녹음 이름' });
+    const row = h('div', { class: 'row' }, input,
+      h('button', { type: 'button', class: 'btn primary', onclick: async () => {
+        r.name = input.value.trim() || defaultName(r.createdAt);
+        await db.putRaw(r); renderList();
+      } }, '저장'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => renderList(list) }, '취소'));
+    li.querySelector('.rtitle').replaceWith(row);
+    input.focus(); input.select();
+  }
+
+  function download(r, fileName) {
+    const url = URL.createObjectURL(r.blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('「' + fileName + '」을(를) 다운로드 폴더에 저장했어요');
+  }
+
+  /* ---------- 버튼 연결 ---------- */
   $('btnDictate').addEventListener('click', () => (dictating ? stopDictation() : startDictation()));
   $('btnRecord').addEventListener('click', () => (recording ? stopRecording() : startRecording()));
   $('btnVoiceStop').addEventListener('click', () => { if (recording) stopRecording(); if (dictating) stopDictation(); });
-  $('btnRecList').addEventListener('click', openList);
+  $('btnRecList').addEventListener('click', () => { A().S.recNote = A().S.cur; A().setView('rec'); });
+  $('rsSave').addEventListener('click', confirmSave);
+  $('rsDiscard').addEventListener('click', confirmDiscard);
 
-  KK.voice = { refresh, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
-  refresh();
+  KK.voice = { refresh, renderList, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
+
+  // 시작할 때: 저장 여부를 정하지 않은 녹음이 있으면 알려 준다
+  refresh().then(async () => {
+    const drafts = (await allRecs()).filter(r => r.draft);
+    if (drafts.length) toast('저장할지 정하지 않은 녹음이 ' + drafts.length + '개 있어요', '녹음 탭', () => A().setView('rec'), 8000);
+  });
 })();

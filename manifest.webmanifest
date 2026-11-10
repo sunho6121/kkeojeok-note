@@ -23,7 +23,7 @@
       "text": "text",
       "url": "url",
       "files": [
-        { "name": "files", "accept": ["application/pdf", ".pdf", "text/plain", ".txt", "image/*", ".jpg", ".jpeg", ".png", ".webp"] }
+        { "name": "files", "accept": ["application/pdf", ".pdf", "text/plain", ".txt", "image/*", ".jpg", ".jpeg", ".png", ".webp", "audio/*", ".m4a", ".mp3", ".wav", ".aac", ".ogg", ".amr", ".3gp"] }
       ]
     }
   }

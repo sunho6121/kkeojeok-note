@@ -464,6 +464,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <input class="search" id="search" type="search" placeholder="노트 검색 (제목·내용·태그)" autocomplete="off">
       <button class="btn" id="btnImportNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>삼성 노트 가져오기</button>
       <button class="btn" id="btnNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>새 노트</button>
+      <input type="file" id="recAppIn" accept="audio/*" capture hidden>
       <input type="file" id="importNoteFile" multiple accept=".txt,.pdf,.jpg,.jpeg,.png,.webp,text/plain,application/pdf,image/*,audio/*,.m4a,.mp3,.wav" hidden>
     </div>
     <div class="import-help" id="importHelp">
@@ -653,6 +654,12 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     </div>
     <label class="chkrow" for="setAutoMin"><input type="checkbox" id="setAutoMin"> 녹취 글을 공유받으면 회의록을 자동으로 만들기</label>
     <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치는 업무 할 일로, 결정사항은 중요 메모로 넣기</label>
+    <label>녹음 버튼을 누르면
+      <select id="setRecWith">
+        <option value="app">음성 녹음 앱이 열려서 녹음 (추천 · 텍스트 변환 가능)</option>
+        <option value="web">끄적노트 안에서 녹음 (짧은 메모용)</option>
+      </select>
+    </label>
     <div class="sep"></div>
     <div>
       <h3>노트 관리 · 백업</h3>

@@ -291,13 +291,52 @@
 
   /* ---------- 버튼 연결 ---------- */
   $('btnDictate').addEventListener('click', () => (dictating ? stopDictation() : startDictation()));
-  $('btnRecord').addEventListener('click', () => (recording ? stopRecording() : startRecording()));
+  /* ---------- 녹음 버튼 → 기기의 음성 녹음 앱(갤럭시: 삼성 음성 녹음)으로 녹음하고 파일을 돌려받기 ---------- */
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const useRecorderApp = () => isAndroid && A().settings.recWith !== 'web';
+  let appNote = null;
+  function openRecorderApp() {
+    if (db.usingFallback) { toast('이 브라우저에서는 녹음을 저장할 수 없어요.'); return; }
+    if (dictating) stopDictation();
+    appNote = A().ensureNote().id;
+    const inp = $('recAppIn');
+    inp.value = '';
+    inp.click();
+  }
+  function fileDuration(f) {
+    return new Promise(res => {
+      const url = URL.createObjectURL(f), au = new Audio();
+      const done = v => { URL.revokeObjectURL(url); res(v); };
+      const t = setTimeout(() => done(0), 5000);
+      au.preload = 'metadata';
+      au.onloadedmetadata = () => { clearTimeout(t); done(isFinite(au.duration) ? Math.round(au.duration) : 0); };
+      au.onerror = () => { clearTimeout(t); done(0); };
+      au.src = url;
+    });
+  }
+  $('recAppIn').addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f || !f.size) return;
+    const dur = await fileDuration(f), now = Date.now(), start = now - dur * 1000;
+    const S = A().S, noteId = (appNote && S.notes.has(appNote)) ? appNote : A().ensureNote().id;
+    const doc = { id: 'rec-' + KK.uid(), kind: 'rec', noteId, createdAt: start, startAt: start, duration: dur, mime: f.type || 'audio/mp4', size: f.size,
+      name: defaultName(start), draft: true, blob: f, src: 'recorder', fileName: f.name || '' };
+    try { await db.putRaw(doc); } catch (err) { toast('녹음을 보관하지 못했어요. 저장 공간을 확인해 주세요.'); return; }
+    askSave(doc); // 끄적노트 녹음과 같이 저장할지 묻는다
+  });
+  $('btnRecord').addEventListener('click', () => {
+    if (recording) { stopRecording(); return; }
+    if (useRecorderApp()) openRecorderApp();
+    else startRecording();
+  });
   $('btnVoiceStop').addEventListener('click', () => { if (recording) stopRecording(); if (dictating) stopDictation(); });
   $('btnRecList').addEventListener('click', () => { A().S.recNote = A().S.cur; A().setView('rec'); });
   $('rsSave').addEventListener('click', confirmSave);
   $('rsDiscard').addEventListener('click', confirmDiscard);
 
-  KK.voice = { refresh, renderList, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
+  if (isAndroid) $('btnRecord').title = '음성 녹음 앱으로 녹음 (설정에서 바꿀 수 있어요)';
+  KK.voice = { refresh, renderList, isAndroid, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
 
   // 시작할 때: 저장 여부를 정하지 않은 녹음이 있으면 알려 준다
   refresh().then(async () => {

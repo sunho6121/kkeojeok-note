@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app' };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -476,14 +476,14 @@
   const dlg = $('dlgSettings');
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
-    $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false;
+    $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false; $('setRecWith').value = settings.recWith === 'web' ? 'web' : 'app';
     $('btnDelNote').hidden = !curNote();
     V.renderGcalSettings();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
     settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
-    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; saveSettings();
+    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.recWith = $('setRecWith').value; saveSettings();
   }
   const KEY_RE = /sk-ant-[A-Za-z0-9_\-]{20,}/;
   function keyMsg(ok, text) { const m = $('keyMsg'); m.className = ok ? 'okmsg' : 'errmsg'; m.textContent = text; }

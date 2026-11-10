@@ -39,7 +39,7 @@
     rec = r; editing = false;
     model = r.minutes ? clone(r.minutes) : null;
     const n = A().S.notes.get(r.noteId);
-    $('mRecMeta').textContent = (r.name || '녹음') + ' · ' + durText(r.duration) + (n ? ' · 「' + KK.views.noteLabel(n) + '」 노트' : '');
+    $('mRecMeta').textContent = (r.name || '녹음') + ' · ' + (r.blob ? durText(r.duration) : '녹취 글만 있음') + (n ? ' · 「' + KK.views.noteLabel(n) + '」 노트' : '');
     $('mSrc').value = r.text != null ? r.text : (r.memo ? '[녹음하면서 쓴 메모]\n' + r.memo : '');
     const meta = r.mmeta || {};
     $('mTitle').value = meta.title || '';
@@ -186,6 +186,61 @@
       summary: o.summary, agenda: o.agenda, decisions: o.decisions, actions, attachments: o.attachments,
     };
   }
+  /* 회의록 만들기 핵심 — 창에서 누를 때와 공유받아 자동으로 만들 때 함께 쓴다 */
+  async function generate(r, text, meta) {
+    const s = A().settings, ctrl = new AbortController();
+    running = { rec: r, ctrl };
+    if (rec && rec.id === r.id) renderRun();
+    if (KK.voice) KK.voice.refresh();
+    try {
+      const out = await KK.claude.minutes({
+        apiKey: s.apiKey, model: s.model, effort: s.effort, text, signal: ctrl.signal,
+        meta: Object.assign({ date: D.ymd(new Date(startOf(r))) }, meta),
+      });
+      const m = fromClaude(out, meta);
+      r.minutes = m; r.minutesAt = Date.now(); r.minutesModel = s.model; r.text = text;
+      r.mmeta = { title: m.title, when: m.when, place: m.place, attendees: m.attendees };
+      r.minutesActions = out.actions;
+      r.autoMinutes = 'done';
+      await db.putRaw(r);
+      const added = s.minutesTasks === false ? 0 : syncTasks(r, m, out.actions);
+      return { m, added };
+    } finally {
+      running = null;
+      if (rec && rec.id === r.id) renderRun();
+      if (KK.voice) KK.voice.refresh();
+    }
+  }
+
+  /* 회의록의 향후조치 → 업무(할 일). 다시 만들면 손대지 않은 이전 항목은 바꿔 넣는다 */
+  function syncTasks(r, m, actions) {
+    const S = A().S, now = Date.now();
+    const norm = t => String(t || '').replace(/\s+/g, '').toLowerCase();
+    const mine = [...S.items.values()].filter(i => i.recId === r.id && i.source === 'minutes');
+    const drop = mine.filter(i => !i.locked && (i.status || 'todo') === 'todo');
+    drop.forEach(i => S.items.delete(i.id));
+    if (drop.length) db.delMany(drop.map(i => i.id));
+    const have = new Set([...S.items.values()].filter(i => !i.deleted).map(i => norm(i.title)));
+    const n = S.notes.get(r.noteId);
+    const noteId = n && !n.closed ? n.id : (S.cur || (n ? n.id : ''));
+    const docs = [];
+    (actions || []).forEach(a => {
+      const title = a.task + (a.owner ? ' (' + a.owner + ')' : '');
+      if (have.has(norm(title)) || have.has(norm(a.task))) return;
+      have.add(norm(title));
+      docs.push({
+        id: 't-' + KK.uid(), kind: 'item', noteId, type: 'task', title: title.slice(0, 80), date: a.dueDate || '', time: '', endTime: '', place: '', to: '',
+        priority: 'normal', detail: '회의: ' + (m.title || r.name || ''), status: 'todo', locked: false, deleted: false,
+        createdAt: now, updatedAt: now, doneAt: 0, source: 'minutes', recId: r.id,
+      });
+    });
+    docs.forEach(d => S.items.set(d.id, d));
+    if (docs.length) db.putMany(docs);
+    if (A().renderAll) A().renderAll();
+    if (KK.gcal && docs.some(d => d.date)) KK.gcal.syncSoon();
+    return docs.length;
+  }
+
   async function run() {
     if (running || !rec) return;
     const text = $('mSrc').value.trim();
@@ -195,38 +250,65 @@
     if (!navigator.onLine) { setMsg('mMsg', '인터넷에 연결되어 있지 않아요. 연결된 뒤 다시 눌러 주세요.', 'err'); return; }
     if (model && !confirm('지금 회의록을 지우고 새로 만들까요? 고친 내용도 사라져요.')) return;
     flushSave();
-    const r = rec, meta = readMeta(), ctrl = new AbortController();
-    running = { rec: r, ctrl };
-    renderRun();
+    const r = rec, meta = readMeta();
     try {
-      const out = await KK.claude.minutes({
-        apiKey: s.apiKey, model: s.model, effort: s.effort, text, signal: ctrl.signal,
-        meta: Object.assign({ date: D.ymd(new Date(startOf(r))) }, meta),
-      });
-      const m = fromClaude(out, meta);
-      r.minutes = m; r.minutesAt = Date.now(); r.minutesModel = s.model; r.text = text;
-      r.mmeta = { title: m.title, when: m.when, place: m.place, attendees: m.attendees };
-      await db.putRaw(r);
-      running = null;
+      const { m, added } = await generate(r, text, meta);
       if (rec && rec.id === r.id && $('dlgMinutes').open) {
         model = clone(m); editing = false;
         $('mTitle').value = m.title; $('mPlace').value = m.place; $('mAtt').value = m.attendees;
         renderRun(); renderOut();
-        setMsg('mMsg', '회의록을 만들었어요. 아래에서 확인하고 내려받으세요.', 'ok');
+        setMsg('mMsg', '회의록을 만들었어요.' + (added ? ' 향후조치 ' + added + '건을 업무 탭에 넣었어요.' : '') + ' 아래에서 확인하고 내려받으세요.', 'ok');
         $('mOut').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
-        renderRun();
         toast('「' + (m.title || r.name) + '」 회의록이 준비됐어요', '보기', () => open(r), 8000);
       }
-      if (KK.voice) KK.voice.refresh();
     } catch (e) {
-      running = null;
-      renderRun();
       if (rec && rec.id === r.id) setMsg('mMsg', errCopy(e), e.code === 'cancelled' ? '' : 'err');
       else if (e.code !== 'cancelled') toast(errCopy(e), null, null, 7000);
     }
   }
   $('mRun').addEventListener('click', run);
+
+  /* ---------- 공유받은 녹취 글로 자동 만들기 ---------- */
+  const queue = [];
+  let draining = false;
+  function auto(r) {
+    if (!r || A().settings.autoMinutes === false) return false;
+    if (!queue.includes(r.id)) queue.push(r.id);
+    r.autoMinutes = 'pending';
+    db.putRaw(r).then(drain);
+    return true;
+  }
+  async function drain() {
+    if (draining) return;
+    draining = true;
+    try {
+      while (queue.length) {
+        const s = A().settings;
+        if (!navigator.onLine || !s.apiKey) break; // 남은 건 연결되면 다시
+        while (running) await new Promise(x => setTimeout(x, 700));
+        const r = await db.get(queue[0]);
+        if (!r || r.minutes || !(r.text || '').trim() || r.autoMinutes !== 'pending') { queue.shift(); continue; }
+        try {
+          const meta = Object.assign({ when: whenOf(r) }, r.mmeta || {});
+          const { m, added } = await generate(r, r.text.trim(), { title: meta.title || '', when: meta.when || whenOf(r), place: meta.place || '', attendees: meta.attendees || '' });
+          toast('「' + (m.title || r.name) + '」 회의록을 만들었어요' + (added ? ' · 할 일 ' + added + '건을 업무에 넣었어요' : ''), '보기', () => open(r), 9000);
+        } catch (e) {
+          if (e.code === 'offline') break;
+          r.autoMinutes = 'error'; db.putRaw(r);
+          if (e.code !== 'cancelled') toast('회의록을 자동으로 만들지 못했어요: ' + errCopy(e), '열기', () => open(r), 9000);
+        }
+        queue.shift();
+      }
+    } finally { draining = false; }
+  }
+  /* 앱을 다시 열거나 인터넷이 연결되면, 기다리던 자동 회의록을 이어서 만든다 */
+  async function resume() {
+    if (db.usingFallback) return;
+    (await db.all()).filter(d => d.kind === 'rec' && d.autoMinutes === 'pending' && !d.minutes).forEach(d => { if (!queue.includes(d.id)) queue.push(d.id); });
+    drain();
+  }
+  const isRunning = id => !!(running && running.rec.id === id) || queue.includes(id);
   $('mStop').addEventListener('click', () => { if (running) running.ctrl.abort(); });
 
   /* ---------- ③ 미리보기·고쳐 쓰기·내려받기 ---------- */
@@ -291,5 +373,5 @@
   }
   $('dlgMinutes').querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => download(b.dataset.fmt)));
 
-  KK.minutes = { open, noteBlocks, whenOf };
+  KK.minutes = { open, noteBlocks, whenOf, auto, resume, isRunning };
 })();

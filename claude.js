@@ -177,7 +177,7 @@ window.KK = window.KK || {};
     summary: STRS,
     agenda: { type: 'array', items: obj({ title: STR, points: { type: 'array', items: obj({ text: STR, subs: STRS }) } }) },
     decisions: STRS,
-    actions: { type: 'array', items: obj({ task: STR, owner: STR, due: STR }) },
+    actions: { type: 'array', items: obj({ task: STR, owner: STR, due: STR, dueDate: STR }) },
     next: STR,
     attachments: STRS,
   });
@@ -212,7 +212,7 @@ window.KK = window.KK || {};
       '- 날짜는 "11. 14.(금)"처럼, 시간은 "14:00"처럼 적어.',
       '- agenda의 title은 안건 이름만(번호 없이). points.text와 subs 앞에 ○, -, 번호 같은 기호를 붙이지 마.',
       '- decisions: 회의에서 정해진 것만. 없으면 [].',
-      '- actions: 누가 언제까지 무엇을 하기로 했는지. task는 할 일, owner는 담당(부서·사람), due는 기한. 모르는 칸은 "".',
+      '- actions: 누가 언제까지 무엇을 하기로 했는지. task는 할 일(짧게), owner는 담당(부서·사람), due는 기한("11. 14.(금)"처럼), dueDate는 같은 기한을 YYYY-MM-DD로. 모르는 칸은 "".',
       '- next: 다음 회의 일정이 나오면 한 줄로, 없으면 "".',
       '- attachments: 회의에서 나눠 준 자료나 참고한 문서 이름. 없으면 [].',
       '- title: 사용자가 회의명을 적었으면 그대로, 아니면 글에서 알 수 있는 회의 이름(30자 이내). "회의록"이라는 말은 붙이지 마.',
@@ -225,7 +225,53 @@ window.KK = window.KK || {};
     ].join('\n');
   }
 
+  /* ---------- 월간 업무 요약 ---------- */
+  const MONTHLY_SCHEMA = obj({
+    headline: STR,
+    areas: { type: 'array', items: obj({ area: STR, points: STRS }) },
+    done: STRS, carry: STRS, notes: STRS,
+  });
+  function monthlyPrompt(label, text, partial) {
+    return [
+      '아래는 사용자가 ' + label + '에 노트에 적은 업무 기록과, 그 달의 일정·할 일 상태, 회의록 요약이야.',
+      '이걸로 ' + label + ' 월간 업무 요약을 만들어 줘. ' + (partial ? '아직 달이 끝나지 않았으니 지금까지의 내용으로 정리해.' : '다음 달로 넘어가면서 지난달에 무슨 일을 했고 무엇이 남았는지 한눈에 보려는 용도야.'),
+      '',
+      '쓰는 법',
+      '- 문체는 개조식 명사형 종결(~함, ~임, ~완료, ~진행 중). 짧고 간결하게.',
+      '- headline: 이 달 업무 전체를 한 문장(50자 이내)으로.',
+      '- areas: 업무 분야(사업·프로젝트·회의체·행정 등)별로 묶어 2~6개. area는 분야 이름(15자 이내), points는 그 분야에서 한 일과 진행 상황 1~4개(각 50자 이내).',
+      '- done: 이 달에 끝낸 주요 업무 최대 8개.',
+      '- carry: 아직 안 끝나서 다음 달로 넘어가는 업무 최대 8개. 기한이 있으면 끝에 "(~12. 5.)"처럼 붙여.',
+      '- notes: 다음 달에도 기억해야 할 결정·기준·숫자 최대 5개. 없으면 [].',
+      '- 병원 진료 예약, 장보기처럼 업무와 관계없는 개인 일은 빼.',
+      '- 기록에 없는 내용은 지어내지 마. 환자 개인정보는 쓰지 마.',
+      '',
+      '기록:',
+      '"""',
+      text.trim(),
+      '"""',
+    ].join('\n');
+  }
+
   KK.claude = {
+    /* 월간 업무 요약: 한 달 기록 → { headline, areas, done, carry, notes } */
+    async monthly({ apiKey, model, effort, label, text, partial, signal }) {
+      const out = await call({
+        apiKey, model, effort, signal, schema: MONTHLY_SCHEMA, maxTokens: 12000,
+        content: [{ type: 'text', text: monthlyPrompt(label, text, partial) }],
+        useFallback: FALLBACK_MODELS.includes(model),
+      });
+      if (out.stop === 'max_tokens') throw fail('bad_output', '요약이 너무 길어 결과가 잘렸어요');
+      const r = parseJSON(out.text);
+      const str = v => (typeof v === 'string' ? v.trim() : '');
+      const arr = v => (Array.isArray(v) ? v : []);
+      const strs = v => arr(v).map(str).filter(Boolean);
+      return {
+        headline: str(r.headline).slice(0, 120),
+        areas: arr(r.areas).map(a => ({ area: str(a && a.area).slice(0, 30), points: strs(a && a.points).slice(0, 5) })).filter(a => a.area && a.points.length).slice(0, 8),
+        done: strs(r.done).slice(0, 10), carry: strs(r.carry).slice(0, 10), notes: strs(r.notes).slice(0, 6),
+      };
+    },
     /* 회의록: 녹취록·메모 글 → 회의록 내용(JSON) */
     async minutes({ apiKey, model, effort, text, meta, signal }) {
       const out = await call({
@@ -248,7 +294,7 @@ window.KK = window.KK || {};
           points: arr(a && a.points).map(p => ({ text: str(p && p.text), subs: strs(p && p.subs) })).filter(p => p.text || p.subs.length),
         })).filter(a => a.title || a.points.length),
         decisions: strs(r.decisions),
-        actions: arr(r.actions).map(a => ({ task: str(a && a.task), owner: str(a && a.owner), due: str(a && a.due) })).filter(a => a.task),
+        actions: arr(r.actions).map(a => ({ task: str(a && a.task), owner: str(a && a.owner), due: str(a && a.due), dueDate: KK.date.isValid(str(a && a.dueDate)) ? str(a.dueDate) : '' })).filter(a => a.task),
         next: str(r.next),
         attachments: strs(r.attachments),
       };

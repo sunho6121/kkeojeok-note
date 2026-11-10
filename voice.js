@@ -222,9 +222,12 @@
     const title = h('div', { class: 'rtitle' }, h('b', null, r.name || defaultName(r.createdAt)),
       r.draft ? h('span', { class: 'chip new' }, '저장 확인 안 됨') : null,
       !r.draft && r.minutes ? h('span', { class: 'chip' }, '회의록') : null,
-      !r.draft && !r.minutes && r.text && r.text.trim() ? h('span', { class: 'chip plain' }, '녹취 글') : null);
+      !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
+      !r.draft && !r.minutes && r.autoMinutes === 'error' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)' }, '자동 회의록 실패') : null,
+      !r.draft && !r.minutes && r.text && r.text.trim() && !(KK.minutes && KK.minutes.isRunning(r.id)) && r.autoMinutes !== 'error' ? h('span', { class: 'chip plain' }, '녹취 글') : null,
+      !r.blob ? h('span', { class: 'chip plain' }, '녹음 파일 없음') : null);
     const meta = h('div', { class: 'it-m' },
-      h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || (r.blob && r.blob.size) || 0)),
+      h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + (r.blob ? ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || r.blob.size || 0) : ' · 녹취 글')),
       n ? h('button', { class: 'linkbtn', style: 'margin-left:0;min-height:28px', onclick: () => { A().openNote(n.id); A().setView('write'); } }, '노트: ' + V.noteLabel(n)) : h('span', null, '노트 없음'));
     const player = h('div', { class: 'rplayer' });
     const playBtn = h('button', { type: 'button', class: 'btn primary', onclick: () => {
@@ -234,19 +237,19 @@
       player.append(au); au.play().catch(() => {});
       playBtn.hidden = true;
     } }, svg('<path d="M8 5v14l11-7z"/>'), '듣기');
-    const acts = h('div', { class: 'row' }, playBtn);
+    const acts = h('div', { class: 'row' }, r.blob ? playBtn : null);
     if (r.draft) {
       acts.append(
         h('button', { type: 'button', class: 'btn', onclick: () => askSave(r) }, '저장할지 정하기'));
     } else {
-      acts.append(
+      acts.append(...[
         h('button', { type: 'button', class: 'btn', onclick: () => KK.minutes.open(r) }, svg(ICON.note), r.minutes ? '회의록 보기' : '회의록 만들기'),
         h('button', { type: 'button', class: 'btn', onclick: () => rename(li, r, list) }, '이름 바꾸기'),
-        h('button', { type: 'button', class: 'btn', onclick: () => download(r, fileName) }, '파일로 받기'),
+        r.blob ? h('button', { type: 'button', class: 'btn', onclick: () => download(r, fileName) }, '파일로 받기') : null,
         h('button', { type: 'button', class: 'btn danger', onclick: async () => {
           await db.del(r.id); await refresh(); renderList();
           toast('「' + (r.name || '녹음') + '」을(를) 지웠어요', '되돌리기', async () => { await db.putRaw(r); await refresh(); renderList(); });
-        } }, '삭제'));
+        } }, '삭제')].filter(Boolean));
     }
     li.append(title, meta, player, acts);
     return li;

@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2 };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -24,10 +24,11 @@
   function saveSettings() { lsSet('kk-settings', JSON.stringify(settings)); }
 
   /* ---------- 그리기 묶음 ---------- */
-  function renderEditorTop() { V.renderChips(); V.renderResult(); }
+  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); }
   function renderAll() {
     $('todayLabel').textContent = D.longToday();
     renderEditorTop(); V.renderNotes(); V.renderSched(); V.renderMemo();
+    if (KK.work) KK.work.render();
   }
   function setView(v) {
     document.body.dataset.view = v;
@@ -39,6 +40,7 @@
     }
     if (v === 'notes') V.renderNotes();
     if (v === 'memo') V.renderMemo();
+    if (v === 'work' && KK.work) KK.work.render();
     if (v === 'rec' && KK.voice) KK.voice.renderList();
     if (v !== 'rec') S.recNote = null;
     lsSet('kk-view', v);
@@ -53,6 +55,7 @@
     if (n) return n;
     const now = Date.now();
     n = { id: 'n-' + KK.uid(), kind: 'note', title: titleEl.value.trim(), titleAuto: !titleEl.value.trim(), body: bodyEl.value, summary: [], tags: [], createdAt: now, updatedAt: now, organizedAt: 0, pending: false, hasInk: false };
+    n.month = KK.work ? KK.work.curYM() : ''; n.series = n.id; // 노트는 달마다 새로 시작
     S.notes.set(n.id, n); S.cur = n.id; lsSet('kk-last', n.id);
     db.put(n); renderEditorTop();
     return n;
@@ -323,6 +326,8 @@
 
   let queueRunning = false;
   async function processQueue() {
+    if (KK.minutes) KK.minutes.resume();   // 기다리던 자동 회의록
+    if (KK.work) KK.work.processMonths(); // 기다리던 월간 업무 요약
     if (queueRunning || !navigator.onLine || !settings.apiKey) return;
     queueRunning = true;
     try {
@@ -345,14 +350,14 @@
     const now = Date.now();
     it.status = s; it.locked = true; it.statusAt = now; it.updatedAt = now;
     it.doneAt = s === 'done' ? now : 0;
-    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo();
+    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render();
     if (KK.gcal) KK.gcal.syncSoon();
   }
   function deleteItem(it) {
     it.deleted = true; it.deletedAt = Date.now();
-    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo();
+    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render();
     if (KK.gcal) KK.gcal.syncSoon();
-    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.gcal) KK.gcal.syncSoon(); });
+    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render(); if (KK.gcal) KK.gcal.syncSoon(); });
   }
   /* 캘린더(그룹웨어 등) 일정을 끄적노트에서 상태 관리하도록 가져온다 — 캘린더 쪽 일정은 건드리지 않음 */
   function adoptEvent(ev) {
@@ -407,7 +412,7 @@
     try {
       const data = JSON.parse(await file.text());
       if (!data || data.app !== 'kkeojeok' || !Array.isArray(data.docs)) throw new Error('형식');
-      const docs = data.docs.filter(d => d && typeof d.id === 'string' && ['note', 'item', 'ink', 'imp'].includes(d.kind));
+      const docs = data.docs.filter(d => d && typeof d.id === 'string' && ['note', 'item', 'ink', 'imp', 'month'].includes(d.kind));
       await db.putMany(docs);
       await loadAll(); S.cur = null; openNote(lsGet('kk-last', '')); renderAll();
       toast('백업에서 ' + docs.filter(d => d.kind === 'note').length + '개 노트를 불러왔어요');
@@ -418,12 +423,14 @@
   const dlg = $('dlgSettings');
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
+    $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false;
     $('btnDelNote').hidden = !curNote();
     V.renderGcalSettings();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
-    settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value; saveSettings();
+    settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
+    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; saveSettings();
   }
   const KEY_RE = /sk-ant-[A-Za-z0-9_\-]{20,}/;
   function keyMsg(ok, text) { const m = $('keyMsg'); m.className = ok ? 'okmsg' : 'errmsg'; m.textContent = text; }
@@ -522,12 +529,16 @@
   }));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSave();
-    else if (D.today() !== S.lastDay) { S.lastDay = D.today(); renderAll(); }
+    else if (D.today() !== S.lastDay) { S.lastDay = D.today(); dayChanged(); }
   });
   window.addEventListener('pagehide', flushSave);
   window.addEventListener('online', () => { $('sync').dataset.s = 'ok'; $('sync').textContent = '기기에 저장됨'; processQueue(); });
   window.addEventListener('offline', () => { $('sync').dataset.s = 'busy'; $('sync').textContent = '오프라인 · 기기에 저장 중'; });
-  setInterval(() => { if (D.today() !== S.lastDay) { S.lastDay = D.today(); renderAll(); } }, 60000);
+  setInterval(() => { if (D.today() !== S.lastDay) { S.lastDay = D.today(); dayChanged(); } }, 60000);
+  function dayChanged() {
+    if (KK.work) KK.work.rollover(); // 달이 바뀌었으면 새 달 노트로 넘긴다
+    renderAll();
+  }
 
   /* ---------- 삼성 노트 가져오기 (파일 선택 · 공유) ---------- */
   function fileToB64(f) {
@@ -554,6 +565,7 @@
   function newImportedNote(title, body, extra) {
     const now = Date.now();
     const n = Object.assign({ id: 'n-' + KK.uid(), kind: 'note', title: title || '', titleAuto: true, body: body || '', summary: [], tags: [], createdAt: now, updatedAt: now, organizedAt: 0, pending: true, hasInk: false, imported: 'samsung-notes' }, extra || {});
+    n.month = KK.work ? KK.work.curYM() : ''; n.series = n.id;
     S.notes.set(n.id, n);
     return n;
   }
@@ -582,17 +594,46 @@
     }
     return Date.now() - (dur || 0) * 1000;
   }
+  /* 음성 녹음 앱의 변환 글처럼 보이는지: 화자 표시(화자 1)나 시각(00:12)이 여러 줄에 있음 */
+  function looksLikeTranscript(t, title) {
+    const lines = String(t || '').split('\n');
+    const marks = lines.filter(l => /^\s*[[(]?\d{1,2}:\d{2}(:\d{2})?[\])]?(\s|$)/.test(l) || /(화자|참석자|발화자|speaker)\s*\d+/i.test(l)).length;
+    return marks >= 3 || (/녹음|녹취|음성|voice|record|transcri/i.test(title || '') && String(t).length > 200);
+  }
+  /* 최근 받은 녹음 가운데 짝이 맞는 것 (따로 공유한 녹음 파일과 변환 글을 묶을 때) */
+  async function recentRec(pred, withinMs) {
+    const now = Date.now();
+    return (await db.all()).filter(d => d.kind === 'rec' && !d.draft && now - (d.createdAt || 0) < withinMs && pred(d))
+      .sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+  }
   async function importFiles(files, shared) {
     flushSave();
-    const made = [], skipped = [];
+    const made = [], skipped = [], toMinutes = [];
     let recs = 0, appended = false, linked = false;
-    // 녹음 파일과 변환 글(글 또는 .txt)을 함께 받으면 둘을 묶어 둔다 → 녹음 탭에서 회의록 만들 때 그대로 쓴다
+    // 녹음 파일과 변환 글(글 또는 .txt)을 함께 받으면 둘을 묶어 둔다 → 회의록을 자동으로 만든다
     let pairText = '';
-    if (!db.usingFallback && files.some(isAudioFile)) {
+    const hasAudio = files.some(isAudioFile);
+    if (!db.usingFallback) {
       const parts = [];
       if (shared && shared.text && shared.text.trim()) parts.push(shared.text.trim());
-      for (const f of files.filter(isTextFile)) { try { parts.push((await f.text()).trim()); } catch (e) { /* 무시 */ } }
-      pairText = cleanText(parts.filter(Boolean).join('\n\n')).trim();
+      const txts = files.filter(isTextFile);
+      for (const f of txts) { try { parts.push((await f.text()).trim()); } catch (e) { /* 무시 */ } }
+      const text = cleanText(parts.filter(Boolean).join('\n\n')).trim();
+      const title = [shared && shared.title, ...txts.map(f => f.name)].filter(Boolean).join(' ');
+      if (text && hasAudio) pairText = text;
+      else if (text && !hasAudio) {
+        // 글만 왔을 때: 방금(30분 안) 받은 녹음에 글이 없으면 그 녹음의 변환 글로, 변환 글처럼 보이면 새 녹취 글로
+        const tr = looksLikeTranscript(text, title);
+        const audio = await recentRec(d => d.blob && !(d.text || '').trim() && !d.minutes, tr ? 3 * 3600e3 : 30 * 60e3);
+        if (audio || tr) {
+          const now = Date.now();
+          const r = audio || { id: 'rec-' + KK.uid(), kind: 'rec', noteId: ensureNote().id, createdAt: now, startAt: guessStart(title, 0), duration: 0, mime: '', size: 0,
+            name: ((shared && shared.title) || (txts[0] && txts[0].name.replace(/\.[^.]+$/, '')) || '녹취 글 ' + D.stamp(now)).slice(0, 60), draft: false, blob: null, src: 'share-text' };
+          r.text = '[녹취록]\n' + text;
+          await db.putRaw(r); recs++; linked = true; toMinutes.push(r);
+          files = files.filter(f => !isTextFile(f)); shared = Object.assign({}, shared, { text: '' });
+        }
+      }
       if (pairText) { files = files.filter(f => !isTextFile(f)); shared = Object.assign({}, shared, { text: '' }); }
     }
     if (shared && shared.text && shared.text.trim()) {
@@ -616,10 +657,16 @@
           if (db.usingFallback) { skipped.push(f.name); continue; }
           const target = ensureNote();
           const dur = await audioDuration(f);
-          const rec = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: target.id, createdAt: Date.now(), startAt: guessStart(f.name, dur), duration: dur, mime: type || 'audio/mp4', size: f.size, name: name || '녹음 파일', draft: false, blob: f, src: 'share' };
-          if (pairText && !linked) { rec.text = '[녹취록]\n' + pairText; linked = true; }
+          // 변환 글을 먼저 따로 받아 둔 게 있으면(3시간 안) 그 녹취 글에 이 녹음 파일을 붙인다
+          const waiting = !pairText && await recentRec(d => !d.blob && (d.text || '').trim(), 3 * 3600e3);
+          const rec = waiting || { id: 'rec-' + KK.uid(), kind: 'rec', noteId: target.id, createdAt: Date.now(), startAt: guessStart(f.name, dur), draft: false, src: 'share' };
+          Object.assign(rec, { duration: dur, mime: type || 'audio/mp4', size: f.size, blob: f });
+          if (!waiting) rec.name = name || '녹음 파일';
+          else if (!rec.minutes && rec.startAt && dur) rec.startAt = guessStart(f.name, dur);
+          if (pairText && !linked) { rec.text = '[녹취록]\n' + pairText; linked = true; toMinutes.push(rec); }
+          if (waiting) linked = true;
           await db.putRaw(rec); recs++;
-          if (target.id === S.cur) appendToNote('[녹음 파일 · ' + rec.name + ']');
+          if (target.id === S.cur && !waiting) appendToNote('[녹음 파일 · ' + rec.name + ']');
           continue;
         }
         if (type.startsWith('text/') || ext === 'txt') {
@@ -647,12 +694,18 @@
       renderAll(); setView(appended ? 'write' : 'rec');
       const parts = [];
       if (appended) parts.push('공유받은 글을 지금 노트에 붙였어요' + tail);
-      if (recs) parts.push(linked ? '녹음과 녹취 글을 함께 보관했어요. 녹음 탭에서 회의록을 만들 수 있어요' : '녹음 ' + recs + '개를 녹음 탭에 보관했어요');
+      const autoOn = settings.autoMinutes !== false;
+      if (toMinutes.length) {
+        parts.push(!autoOn ? '녹취 글을 받았어요. 녹음 탭에서 회의록을 만들 수 있어요'
+          : !settings.apiKey ? '녹취 글을 받았어요. API 키를 넣으면 회의록을 자동으로 만들어요'
+            : navigator.onLine ? '녹취 글을 받았어요. Claude가 회의록을 만들고 있어요' : '녹취 글을 받았어요. 인터넷이 연결되면 회의록을 만들어요');
+      } else if (recs) parts.push(linked ? '녹음 파일을 받아 녹취 글과 묶었어요' : '녹음 ' + recs + '개를 녹음 탭에 보관했어요');
       toast(parts.join(' · '), recs && appended ? '녹음 탭' : null, () => setView('rec'), 7000);
       if (appended) processQueue();
     } else if (skipped.length) {
       toast('읽을 수 없는 파일이에요. 삼성 노트에서 PDF나 텍스트 파일로 공유해 주세요.', null, null, 6000);
     }
+    if (KK.minutes) toMinutes.forEach(r => KK.minutes.auto(r)); // 녹취 글 → 회의록 자동으로
   }
   async function takeShared() {
     if (!/[?&]share=1/.test(location.search)) return;
@@ -753,7 +806,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote };
+  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {
@@ -772,11 +825,15 @@
   async function start() {
     await db.init();
     await loadAll();
+    if (KK.work) await KK.work.init();
     if (db.usingFallback) $('storeNote').textContent = '이 브라우저는 간이 저장소를 써요. 백업을 자주 받아 두세요.';
     if (!navigator.onLine) window.dispatchEvent(new Event('offline'));
     setMode(lsGet('kk-mode', 'type') === 'pen' ? 'pen' : 'type');
-    const last = lsGet('kk-last', '');
-    openNote(S.notes.has(last) ? last : (V.notesSorted()[0] || {}).id || null);
+    const moved = KK.work ? KK.work.rollover() : {}; // 달이 바뀌었으면 새 달 노트로
+    let last = lsGet('kk-last', '');
+    if (moved[last]) last = moved[last];
+    const fallback = V.notesSorted().find(n => !n.closed) || V.notesSorted()[0] || {};
+    openNote(S.notes.has(last) ? last : fallback.id || null);
     renderAll();
     setView('write');
     await takeShared();

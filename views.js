@@ -23,14 +23,16 @@ window.KK = window.KK || {};
   function renderChips() {
     const S = A().S, box = $('noteChips');
     box.textContent = '';
-    let list = notesSorted().slice(0, 4);
+    // 이번 달 노트만 (지난 달 노트는 노트 탭에서 달별로)
+    const cm = KK.work ? KK.work.curYM() : '';
+    let list = notesSorted().filter(n => !n.closed && (!cm || !n.month || n.month === cm)).slice(0, 4);
     if (S.cur && !list.some(n => n.id === S.cur)) list = [A().S.notes.get(S.cur), ...list.slice(0, 3)];
     list.sort((a, b) => a.createdAt - b.createdAt); // 쓰는 중에 칩 순서가 바뀌지 않게
     if (!S.cur) box.append(h('button', { class: 'nchip', 'aria-current': 'true' }, '새 노트'));
     list.forEach(n => box.append(h('button', {
       class: 'nchip', 'aria-current': String(n.id === S.cur), title: noteLabel(n),
       onclick: () => A().openNote(n.id),
-    }, noteLabel(n))));
+    }, noteLabel(n) + (cm && n.month && n.month !== cm ? ' · ' + KK.work.mon(n.month) : ''))));
     box.append(h('button', { class: 'nchip add', onclick: () => A().newNote() }, '+ 새 노트'));
   }
 
@@ -80,8 +82,21 @@ window.KK = window.KK || {};
       ul.append(h('li', { class: 'empty' }, q ? '찾는 노트가 없어요.' : '아직 노트가 없어요. 쓰기 탭에서 바로 적어 보세요.'));
       return;
     }
-    const today = D.today();
-    list.forEach(n => {
+    const today = D.today(), W = KK.work;
+    // 달별로 묶기 (최근 달 먼저)
+    const byMonth = new Map();
+    list.forEach(n => { const m = n.month || ''; if (!byMonth.has(m)) byMonth.set(m, []); byMonth.get(m).push(n); });
+    const order = [...byMonth.keys()].sort().reverse();
+    order.forEach(m => {
+      if (W && m) ul.append(h('li', { class: 'mhead' },
+        h('h3', null, W.monthLabel(m) + (m === W.curYM() ? ' · 이번 달' : '')),
+        h('button', { class: 'linkbtn', onclick: () => W.show(m) }, '업무 요약 보기')));
+      byMonth.get(m).forEach(n => noteCard(n, today));
+    });
+  }
+  function noteCard(n, today) {
+    const S = A().S, ul = $('noteList');
+    {
       const lines = (n.body || '').split('\n').map(s => s.trim()).filter(Boolean);
       const snippet = (n.summary && n.summary[0]) || lines.slice(n.title ? 0 : 1, 3).join(' · ');
       const its = itemsOf(n.id).filter(isSched);
@@ -91,13 +106,14 @@ window.KK = window.KK || {};
       else if (!n.organizedAt && (lines.length || n.hasInk)) chips.push(h('span', { class: 'chip new' }, '새 메모'));
       else if (n.organizedAt && n.updatedAt > n.organizedAt + 1500) chips.push(h('span', { class: 'chip plain' }, '수정됨'));
       if (open) chips.push(h('span', { class: 'chip' }, '할 것 ' + open));
+      if (n.closed) chips.push(h('span', { class: 'chip plain' }, '지난 달'));
       if (n.hasInk) chips.push(h('span', { class: 'chip plain' }, '필기'));
       (n.tags || []).slice(0, 2).forEach(t => chips.push(h('span', { class: 'chip plain' }, '#' + t)));
       ul.append(h('li', null, h('button', {
         class: 'ncard', 'aria-current': String(n.id === S.cur),
         onclick: () => { A().openNote(n.id); A().setView('write'); },
       }, h('div', { class: 't' }, noteLabel(n)), snippet ? h('div', { class: 's' }, snippet) : null, h('div', { class: 'm' }, chips))));
-    });
+    }
   }
 
   /* ---------- 일정 ---------- */

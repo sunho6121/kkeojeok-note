@@ -274,6 +274,48 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .srline{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-size:15px;margin-top:6px;overflow-wrap:anywhere}
 .srline mark{background:var(--mark);color:var(--mark-ink);border-radius:3px;padding:0 1px}
 #dlgSearch{width:min(720px,calc(100vw - 32px))}
+/* 일정: 주간·월간 */
+#vSched.calmode #week,#vSched.calmode #segStatus{display:none}
+#vSched.calmode .sched{max-width:1200px}
+.cal{display:grid;gap:8px}
+.cal:empty{display:none}
+.cnav{display:flex;align-items:center;gap:4px}
+.cnav h2{font-family:var(--f-display);font-size:20px;margin:0 6px}
+.cnav .nav{min-width:44px;font-size:22px;padding:0 10px;line-height:1}
+.cscroll{overflow-x:auto}
+.cweek{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) repeat(2,minmax(0,.8fr));gap:6px;min-width:700px}
+.cday{background:var(--sheet);border:1px solid var(--line);border-radius:12px;min-height:300px;display:flex;flex-direction:column;min-width:0}
+.cday.wkend{background:var(--paper)}
+.cday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cdh{display:flex;align-items:baseline;gap:6px;padding:8px 10px 6px;border-bottom:1px solid var(--rule)}
+.cdh span{font-size:12.5px;color:var(--muted)}
+.cdh b{font-family:var(--f-mono);font-size:18px;font-weight:500}
+.cdh small{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.cday.today .cdh b{background:linear-gradient(transparent 55%,var(--mark) 55%)}
+.cday.sun .cdh span,.cday.sun .cdh b{color:var(--danger)}
+.cdl{display:flex;flex-direction:column;gap:4px;padding:6px}
+.cchip{display:block;width:100%;text-align:left;font-size:13px;line-height:1.35;padding:4px 7px;border-radius:7px;background:var(--accent-soft);color:var(--ink);border-left:3px solid var(--accent);overflow-wrap:anywhere}
+.cchip b{font-family:var(--f-mono);font-weight:500;font-size:11.5px;color:var(--accent);margin-right:4px}
+.cchip.t{background:var(--sheet);border:1px solid var(--line);border-left:3px solid var(--accent)}
+.cchip.g{background:var(--paper);border-left-color:var(--muted)}
+.cchip.g b{color:var(--muted)}
+.cchip.v-late{border-left-color:var(--danger);background:var(--danger-soft)}
+.cchip.done,.cchip.v-past{opacity:.6}
+.cchip.done span{text-decoration:line-through}
+.cmh{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));font-size:12.5px;color:var(--muted);text-align:center}
+.cmh .sun{color:var(--danger)}
+.cgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ccell{background:var(--sheet);min-height:100px;padding:4px 5px 6px;display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0}
+.ccell.out{background:var(--paper)}
+.ccell.out .cn{opacity:.45}
+.ccell.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+.ccell .cn{font-family:var(--f-mono);font-size:13px;align-self:flex-start;padding:0 4px;border-radius:6px;line-height:1.6}
+.ccell.sun .cn{color:var(--danger)}
+.ccell.today .cn{background:var(--accent);color:var(--accent-ink)}
+.ccell .cchip{font-size:11.5px;padding:1px 4px;border-radius:4px;border-left-width:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccell .cchip b{font-size:10.5px;margin-right:3px}
+.cmore{font-size:11px;color:var(--muted);padding-left:4px}
+@media (max-width:600px){.ccell{min-height:66px;padding:2px}.ccell .cchip{font-size:10px}.ccell .cchip b{display:none}}
 #dlgBoard{width:min(760px,calc(100vw - 24px))}
 .blist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;max-height:46vh;overflow:auto}
 .blist li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 10px;border-top:1px solid var(--rule)}
@@ -454,6 +496,9 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="gbar" id="gbar" hidden></div>
     <div class="tiles" id="tiles"></div>
     <div class="ctrl">
+      <div class="seg" role="group" aria-label="보기 방식" id="segView">
+        <button data-c="list" aria-pressed="true">목록</button><button data-c="week" aria-pressed="false">주간</button><button data-c="month" aria-pressed="false">월간</button>
+      </div>
       <div class="seg" role="group" aria-label="상태 보기" id="segStatus">
         <button data-s="open" aria-pressed="true">할 것</button><button data-s="done" aria-pressed="false">완결</button><button data-s="other" aria-pressed="false">취소·보류</button>
       </div>
@@ -461,6 +506,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
         <button data-f="all" aria-pressed="true">전체</button><button data-f="event" aria-pressed="false">약속</button><button data-f="task" aria-pressed="false">할 일</button>
       </div>
     </div>
+    <div class="cal" id="cal"></div>
     <div class="week" id="week"></div>
     <div id="slist" style="display:flex;flex-direction:column;gap:16px"></div>
     <div class="nfoot"><button class="btn ghost" id="btnIcsAll">남은 일정 캘린더 파일(.ics)로 내보내기</button></div>

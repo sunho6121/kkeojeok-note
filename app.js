@@ -582,6 +582,11 @@
     document.querySelectorAll('#segType button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     V.renderSched();
   }));
+  S.cview = ['list', 'week', 'month'].includes(lsGet('kk-cview', 'list')) ? lsGet('kk-cview', 'list') : 'list';
+  document.querySelectorAll('#segView button').forEach(b => b.addEventListener('click', () => {
+    S.cview = b.dataset.c; S.day = null; S.cdate = null; lsSet('kk-cview', S.cview);
+    V.renderSched();
+  }));
   document.querySelectorAll('#segStatus button').forEach(b => b.addEventListener('click', () => {
     S.sview = b.dataset.s; S.day = null;
     document.querySelectorAll('#segStatus button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));

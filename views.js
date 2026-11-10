@@ -231,6 +231,62 @@ window.KK = window.KK || {};
       h('button', { class: 'linkbtn', onclick: () => G.sync(true) }, '지금 동기화'));
   }
 
+  /* ---------- 일정: 주간(가로 7칸) · 월간(달력) ---------- */
+  const mondayOf = d => D.addDays(d, -((d.getDay() + 6) % 7));
+  function calChip(r, small) {
+    const st = r.it ? (r.it.status || 'todo') : '';
+    const cls = 'cchip ' + (r.kind === 'g' ? 'g' : r.type === 'task' ? 't' : 'e') + ' v-' + r.vs + (st === 'done' ? ' done' : '');
+    const kids = [r.time ? h('b', null, r.time) : null, h('span', null, r.title)];
+    return small ? h('span', { class: cls }, kids)
+      : h('button', { class: cls, title: r.title + (r.place ? ' · ' + r.place : ''), onclick: () => openRow(r) }, kids);
+  }
+  function renderCal(rows, today) {
+    const S = A().S, box = $('cal');
+    box.textContent = '';
+    const anchor = S.cdate ? D.parse(S.cdate) : new Date();
+    const byDay = new Map();
+    rows.filter(r => r.date && !(r.it && r.it.status === 'cancel')).sort(sortItems)
+      .forEach(r => { if (!byDay.has(r.date)) byDay.set(r.date, []); byDay.get(r.date).push(r); });
+    const nav = (label, prev, next) => h('div', { class: 'cnav' },
+      h('button', { class: 'btn ghost nav', 'aria-label': '이전', onclick: prev }, '‹'),
+      h('h2', null, label),
+      h('button', { class: 'btn ghost nav', 'aria-label': '다음', onclick: next }, '›'),
+      h('button', { class: 'linkbtn', onclick: () => { S.cdate = null; S.day = null; renderSched(); } }, '오늘'));
+    if (S.cview === 'week') {
+      const mon = mondayOf(anchor), sun = D.addDays(mon, 6);
+      const lab = (mon.getMonth() + 1) + '월 ' + mon.getDate() + '일 ~ ' + (sun.getMonth() !== mon.getMonth() ? (sun.getMonth() + 1) + '월 ' : '') + sun.getDate() + '일';
+      box.append(nav(lab, () => { S.cdate = D.ymd(D.addDays(mon, -7)); renderSched(); }, () => { S.cdate = D.ymd(D.addDays(mon, 7)); renderSched(); }));
+      const grid = h('div', { class: 'cweek' });
+      for (let i = 0; i < 7; i++) {
+        const d = D.addDays(mon, i), key = D.ymd(d), list = byDay.get(key) || [];
+        grid.append(h('div', { class: 'cday' + (key === today ? ' today' : '') + (i >= 5 ? ' wkend' : '') + (i === 6 ? ' sun' : '') },
+          h('div', { class: 'cdh' }, h('span', null, D.DOW[d.getDay()]), h('b', null, d.getDate()), list.length ? h('small', null, list.length) : null),
+          h('div', { class: 'cdl' }, list.map(r => calChip(r)))));
+      }
+      box.append(h('div', { class: 'cscroll' }, grid));
+      return;
+    }
+    const y = anchor.getFullYear(), m = anchor.getMonth();
+    const first = new Date(y, m, 1), start = mondayOf(first);
+    box.append(nav(y + '년 ' + (m + 1) + '월',
+      () => { S.cdate = D.ymd(new Date(y, m - 1, 1)); S.day = null; renderSched(); },
+      () => { S.cdate = D.ymd(new Date(y, m + 1, 1)); S.day = null; renderSched(); }));
+    const head = h('div', { class: 'cmh' }, ['월', '화', '수', '목', '금', '토', '일'].map((w, i) => h('span', { class: i === 6 ? 'sun' : '' }, w)));
+    const grid = h('div', { class: 'cgrid' });
+    const weeks = Math.ceil((((first.getDay() + 6) % 7) + new Date(y, m + 1, 0).getDate()) / 7);
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = D.addDays(start, i), key = D.ymd(d), list = byDay.get(key) || [];
+      const pick = () => { S.day = S.day === key ? null : key; renderSched(); };
+      grid.append(h('div', {
+        class: 'ccell' + (d.getMonth() !== m ? ' out' : '') + (i % 7 === 6 ? ' sun' : '') + (key === today ? ' today' : '') + (S.day === key ? ' sel' : ''),
+        role: 'button', tabindex: '0', 'aria-label': D.dayLabel(key) + ' 일정 ' + list.length + '개',
+        onclick: pick, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } },
+      }, h('span', { class: 'cn' }, d.getDate()), list.slice(0, 3).map(r => calChip(r, true)),
+      list.length > 3 ? h('span', { class: 'cmore' }, '+' + (list.length - 3)) : null));
+    }
+    box.append(head, grid);
+  }
+
   function renderSched() {
     const S = A().S, today = D.today();
     const all = unifiedRows(today);
@@ -247,6 +303,21 @@ window.KK = window.KK || {};
     [['warn', late, '미완결'], ['', todayOpen, '오늘 일정'], ['go', doing, '진행중'], ['ok', doneWeek, '최근 7일 완결']]
       .forEach(([c, v, l]) => tiles.append(h('div', { class: 'tile ' + (v ? c : '') }, h('b', null, v), h('span', null, l))));
     $('tabCnt').textContent = String(late + todayOpen || '');
+
+    // 보기: 목록 / 주간 / 월간
+    const calMode = S.cview === 'week' || S.cview === 'month';
+    $('vSched').classList.toggle('calmode', calMode);
+    document.querySelectorAll('#segView button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === (S.cview || 'list'))));
+    if (calMode) {
+      renderCal(typed, today);
+      const box = $('slist'); box.textContent = '';
+      if (S.cview === 'month') {
+        if (S.day) box.append(group(D.dayLabel(S.day), typed.filter(r => r.date === S.day).sort(sortItems), today) || h('p', { class: 'empty' }, D.dayLabel(S.day) + '에는 일정이 없어요.'));
+        else box.append(h('p', { class: 'empty' }, '날짜를 누르면 그날 일정을 아래에 자세히 보여 줘요.'));
+      }
+      return;
+    }
+    $('cal').textContent = '';
 
     // 7일 띠
     const wk = $('week'); wk.textContent = '';

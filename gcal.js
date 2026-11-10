@@ -121,7 +121,8 @@ window.KK = window.KK || {};
     fetching = (async () => {
       if (!cfg.cals.length) await refreshCalendars();
       const now = new Date();
-      const timeMin = D.addDays(now, -14).toISOString(), timeMax = D.addDays(now, 120).toISOString();
+      // 월간 달력에서 지난달까지 볼 수 있게 지난달 1일부터
+      const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString(), timeMax = D.addDays(now, 120).toISOString();
       const out = [];
       for (const c of cfg.cals.filter(x => cfg.showCals[x.id] !== false)) {
         let pageToken = '';

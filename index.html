@@ -273,7 +273,55 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .srline{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-size:15px;margin-top:6px;overflow-wrap:anywhere}
 .srline mark{background:var(--mark);color:var(--mark-ink);border-radius:3px;padding:0 1px}
 #dlgSearch{width:min(720px,calc(100vw - 32px))}
-@media (prefers-reduced-motion:reduce){.busy .spin,.vdot{animation:none}}
+
+/* 회의록 만들기 */
+#dlgMinutes{width:min(920px,calc(100vw - 24px))}
+.mtop{display:flex;align-items:center;gap:10px}
+.mtop h2{flex:1}
+.mstep{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.mstep h3{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:0;font-size:16px}
+.mstep h3 .when{font-family:var(--f-body);font-size:13px;font-weight:400}
+.dlg textarea.mta{width:100%;min-height:200px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:10px 12px;font-size:15px;line-height:1.6;resize:vertical}
+.m2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.m2{grid-template-columns:1fr}}
+.mtip{font-size:13.5px !important;background:var(--accent-soft);color:var(--ink) !important;border-radius:10px;padding:8px 12px}
+.mpick{display:grid;gap:6px;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--paper)}
+.mpick label{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start;font-weight:400;font-size:14px;padding:8px;border-radius:8px;background:var(--sheet);cursor:pointer}
+.mpick input{width:20px;height:20px;margin:2px 0 0}
+.mpick .pv{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mpick small{display:block;color:var(--muted);font-size:12px}
+.mrun{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mmsg{font-size:14px;color:var(--muted);flex:1 1 220px;min-width:0}
+.mmsg.err{color:var(--danger)}
+.mmsg.ok{color:var(--ok)}
+.mmsg .spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+.mpaper{background:#FFFFFF;border:1px solid var(--line);border-radius:8px;padding:20px 18px;overflow:auto;max-height:62vh}
+.mpaper .mdoc{min-width:600px}
+.mdl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mdl .lbl{font-size:14px;font-weight:600;margin-left:auto}
+
+/* 회의록 문서 (미리보기·인쇄 공통) — 종이 문서라 화면 테마와 상관없이 흰 바탕 검은 글씨 */
+.mdoc{font-family:"Malgun Gothic","맑은 고딕","Noto Sans KR","IBM Plex Sans KR",sans-serif;color:#000;font-size:14px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.mdoc h1{font-family:inherit;font-size:24px;font-weight:800;text-align:center;margin:6px 0 20px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.mdoc table{width:100%;border-collapse:collapse;border:2px solid #000;table-layout:fixed}
+.mdoc th,.mdoc td{border:1px solid #000;color:#000;padding:6px 9px;vertical-align:middle;text-align:left;overflow-wrap:anywhere}
+.mdoc th{background:#D9D9D9;color:#000;font-weight:400;text-align:center;padding:6px 2px;white-space:pre}
+.mdoc p{margin:0;color:#000;font-size:inherit}
+.mdoc p.h{font-weight:700}
+.mdoc p.h:not(:first-child){margin-top:8px}
+.mdoc p.b1{padding-left:1.4em;text-indent:-1.4em}
+.mdoc p.b2{padding-left:2.2em;text-indent:-.8em}
+#printArea{display:none}
+@media print{
+  @page{size:A4;margin:15mm}
+  html,body{height:auto !important;overflow:visible !important;background:#FFFFFF !important;display:block !important;padding:0 !important}
+  body > :not(#printArea){display:none !important}
+  #printArea{display:block !important}
+  #printArea .mdoc{font-size:11pt}
+  #printArea .mdoc h1{font-size:20pt}
+  #printArea .mdoc p{break-inside:avoid}
+}
+@media (prefers-reduced-motion:reduce){.busy .spin,.vdot,.mmsg .spin{animation:none}}
 </style>
 </head>
 <body data-view="write">
@@ -394,13 +442,15 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   <div class="notes">
     <div class="import-help">
       <div><b>긴 회의 녹음은 삼성 '음성 녹음' 앱을 추천해요.</b> 화면을 꺼도 계속 녹음되고, Galaxy AI 텍스트 변환으로 글로 바꿀 수 있어요.</div>
-      <div>음성 녹음 앱에서 <b>공유 → 끄적노트</b>를 고르면 녹음 파일은 여기, 변환된 글은 지금 쓰는 노트에 붙고 Claude가 정리해요. 끄적노트의 녹음 버튼은 짧은 메모용이에요 (앱을 닫으면 멈춰요).</div>
+      <div>음성 녹음 앱에서 <b>공유 → 끄적노트</b>를 고르면 녹음 파일은 여기, 변환된 글은 지금 쓰는 노트에 붙고 Claude가 정리해요. 녹음 파일과 변환 글을 함께 보내면 둘이 묶여요. 끄적노트의 녹음 버튼은 짧은 메모용이에요 (앱을 닫으면 멈춰요).</div>
+      <div>녹음마다 있는 <b>회의록 만들기</b>를 누르면 녹취 글을 Claude가 간결하게 요약해 회의록 양식으로 만들고, 한글·Word·PDF로 받을 수 있어요.</div>
     </div>
     <div id="recView" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 </main>
 
 <div class="toast" id="toast" hidden><span id="toastText"></span><button id="toastBtn" hidden></button></div>
+<div id="printArea" aria-hidden="true"></div>
 
 <dialog id="dlgItem">
   <form method="dialog" class="dlg" id="itemForm">
@@ -422,6 +472,57 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <input class="sbox" id="searchQ" type="search" placeholder="찾을 말 (모든 노트의 내용에서 찾아요)" autocomplete="off">
     <div class="sres" id="searchResults"></div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary" type="button" id="btnSearchClose">닫기</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgMinutes" aria-labelledby="mHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="mHead">회의록 만들기</h2><button type="button" class="btn ghost" id="mClose">닫기</button></div>
+    <p id="mRecMeta"></p>
+
+    <section class="mstep">
+      <h3>① 회의 내용 글 <span class="when" id="mSrcCount"></span></h3>
+      <textarea class="mta" id="mSrc" spellcheck="false" placeholder="녹음을 글로 옮긴 녹취록이나 회의하면서 적은 메모를 넣어 주세요.&#10;아래 버튼으로 붙여넣거나, 텍스트 파일을 불러오거나, 노트에서 골라 넣을 수 있어요."></textarea>
+      <div class="row">
+        <button type="button" class="btn" id="mPaste">붙여넣기</button>
+        <button type="button" class="btn" id="mFile">텍스트 파일</button>
+        <button type="button" class="btn" id="mFromNote">노트에서 가져오기</button>
+        <input type="file" id="mFileIn" accept=".txt,.md,.srt,.vtt,text/plain" hidden>
+        <span class="mmsg" id="mSrcMsg"></span>
+      </div>
+      <div id="mPick" hidden></div>
+      <p class="mtip">Claude는 녹음 소리를 직접 듣지 못해요. 삼성 '음성 녹음' 앱에서 회의를 녹음하고 <b>텍스트 변환</b>한 글을 복사해 붙여넣으면 가장 정확해요. 변환 글과 녹음 파일을 함께 <b>공유 → 끄적노트</b>로 보내면 여기에 자동으로 들어가요.</p>
+    </section>
+
+    <section class="mstep">
+      <h3>② 기본 정보 <span class="when">비워 두면 Claude가 글에서 찾아 채워요</span></h3>
+      <label>회의명<input type="text" id="mTitle" autocomplete="off"></label>
+      <div class="m2">
+        <label>일시<input type="text" id="mWhen" autocomplete="off"></label>
+        <label>장소<input type="text" id="mPlace" autocomplete="off"></label>
+      </div>
+      <label>참석자<input type="text" id="mAtt" autocomplete="off"></label>
+    </section>
+
+    <div class="mrun">
+      <button type="button" class="btn primary" id="mRun">Claude로 회의록 만들기</button>
+      <button type="button" class="btn" id="mStop" hidden>그만두기</button>
+      <span class="mmsg" id="mMsg"></span>
+    </div>
+
+    <section class="mstep" id="mOut" hidden>
+      <h3>③ 회의록 <span class="when" id="mMade"></span></h3>
+      <div class="mpaper" id="mPreview"></div>
+      <textarea class="mta" id="mEdit" spellcheck="false" hidden style="min-height:360px"></textarea>
+      <div class="mdl">
+        <button type="button" class="btn" id="mEditBtn">글 고치기</button>
+        <span class="lbl">내려받기</span>
+        <button type="button" class="btn primary" data-fmt="hwpx">한글 (HWPX)</button>
+        <button type="button" class="btn primary" data-fmt="docx">Word (DOCX)</button>
+        <button type="button" class="btn primary" data-fmt="pdf">PDF</button>
+      </div>
+      <p class="mmsg" id="mDlMsg"></p>
+    </section>
   </form>
 </dialog>
 
@@ -510,6 +611,9 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="gcal.js"></script>
 <script src="app.js"></script>
 <script src="voice.js"></script>
+<script src="hwpx-tpl.js"></script>
+<script src="docgen.js"></script>
+<script src="minutes.js"></script>
 <script src="search.js"></script>
 </body>
 </html>

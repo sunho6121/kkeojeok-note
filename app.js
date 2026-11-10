@@ -569,10 +569,32 @@
     });
   }
   const AUDIO_EXT = ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'opus', 'webm', '3gp', 'amr'];
+  const extOf = f => ((f.name || '').split('.').pop() || '').toLowerCase();
+  const isAudioFile = f => (f.type || '').startsWith('audio/') || AUDIO_EXT.includes(extOf(f));
+  const isTextFile = f => (f.type || '').startsWith('text/') || extOf(f) === 'txt';
+  /* 녹음 시작 시각: 파일 이름에 날짜·시각(20261110_141530, 261110_141530)이 있으면 그걸, 없으면 받은 시각 − 길이 */
+  function guessStart(name, dur) {
+    const m = String(name || '').match(/(20\d{2}|\d{2})(\d{2})(\d{2})[_\- ]?(\d{2})(\d{2})(\d{2})?/);
+    if (m) {
+      const y = m[1].length === 2 ? 2000 + +m[1] : +m[1];
+      const d = new Date(y, +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+      if (!isNaN(d) && +m[2] >= 1 && +m[2] <= 12 && +m[4] < 24 && Math.abs(Date.now() - d) < 400 * 864e5) return +d;
+    }
+    return Date.now() - (dur || 0) * 1000;
+  }
   async function importFiles(files, shared) {
     flushSave();
     const made = [], skipped = [];
-    let recs = 0, appended = false;
+    let recs = 0, appended = false, linked = false;
+    // 녹음 파일과 변환 글(글 또는 .txt)을 함께 받으면 둘을 묶어 둔다 → 녹음 탭에서 회의록 만들 때 그대로 쓴다
+    let pairText = '';
+    if (!db.usingFallback && files.some(isAudioFile)) {
+      const parts = [];
+      if (shared && shared.text && shared.text.trim()) parts.push(shared.text.trim());
+      for (const f of files.filter(isTextFile)) { try { parts.push((await f.text()).trim()); } catch (e) { /* 무시 */ } }
+      pairText = cleanText(parts.filter(Boolean).join('\n\n')).trim();
+      if (pairText) { files = files.filter(f => !isTextFile(f)); shared = Object.assign({}, shared, { text: '' }); }
+    }
     if (shared && shared.text && shared.text.trim()) {
       const cur = curNote();
       if (cur && !files.length) {
@@ -593,7 +615,9 @@
           // 음성 녹음 앱 등에서 보낸 녹음 파일 → 지금 노트에 붙은 녹음으로 보관
           if (db.usingFallback) { skipped.push(f.name); continue; }
           const target = ensureNote();
-          const rec = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: target.id, createdAt: f.lastModified || Date.now(), duration: await audioDuration(f), mime: type || 'audio/mp4', size: f.size, name: name || '녹음 파일', draft: false, blob: f };
+          const dur = await audioDuration(f);
+          const rec = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: target.id, createdAt: Date.now(), startAt: guessStart(f.name, dur), duration: dur, mime: type || 'audio/mp4', size: f.size, name: name || '녹음 파일', draft: false, blob: f, src: 'share' };
+          if (pairText && !linked) { rec.text = '[녹취록]\n' + pairText; linked = true; }
           await db.putRaw(rec); recs++;
           if (target.id === S.cur) appendToNote('[녹음 파일 · ' + rec.name + ']');
           continue;
@@ -623,7 +647,7 @@
       renderAll(); setView(appended ? 'write' : 'rec');
       const parts = [];
       if (appended) parts.push('공유받은 글을 지금 노트에 붙였어요' + tail);
-      if (recs) parts.push('녹음 ' + recs + '개를 녹음 탭에 보관했어요');
+      if (recs) parts.push(linked ? '녹음과 녹취 글을 함께 보관했어요. 녹음 탭에서 회의록을 만들 수 있어요' : '녹음 ' + recs + '개를 녹음 탭에 보관했어요');
       toast(parts.join(' · '), recs && appended ? '녹음 탭' : null, () => setView('rec'), 7000);
       if (appended) processQueue();
     } else if (skipped.length) {

@@ -117,7 +117,7 @@ window.KK = window.KK || {};
 
   function fail(code, message) { const e = new Error(message || code); e.code = code; return e; }
 
-  async function call({ apiKey, model, effort, content, signal, maxTokens, withSchema, useFallback }) {
+  async function call({ apiKey, model, effort, content, signal, maxTokens, withSchema, schema, useFallback }) {
     const headers = {
       'content-type': 'application/json',
       'x-api-key': apiKey,
@@ -130,7 +130,7 @@ window.KK = window.KK || {};
       output_config: { effort: ['low', 'medium', 'high'].includes(effort) ? effort : 'high' },
       messages: [{ role: 'user', content }],
     };
-    if (withSchema) body.output_config.format = { type: 'json_schema', schema: SCHEMA };
+    if (withSchema || schema) body.output_config.format = { type: 'json_schema', schema: schema || SCHEMA };
     if (useFallback) { headers['anthropic-beta'] = FALLBACK_BETA; body.fallbacks = 'default'; }
 
     let res;
@@ -145,7 +145,7 @@ window.KK = window.KK || {};
     if (!res.ok) {
       const msg = (data && data.error && data.error.message) || ('HTTP ' + res.status);
       if (res.status === 400 && useFallback && /fallback|beta/i.test(msg)) {
-        return call({ apiKey, model, effort, content, signal, maxTokens, withSchema, useFallback: false });
+        return call({ apiKey, model, effort, content, signal, maxTokens, withSchema, schema, useFallback: false });
       }
       if (res.status === 401) throw fail('bad_key', msg);
       if (res.status === 403) throw fail('forbidden', msg);
@@ -169,7 +169,91 @@ window.KK = window.KK || {};
     throw fail('bad_output', '정리 결과를 읽지 못했어요');
   }
 
+  /* ---------- 회의록 ---------- */
+  const STR = { type: 'string' }, STRS = { type: 'array', items: STR };
+  const obj = (props) => ({ type: 'object', additionalProperties: false, required: Object.keys(props), properties: props });
+  const MINUTES_SCHEMA = obj({
+    title: STR, place: STR, attendees: STR,
+    summary: STRS,
+    agenda: { type: 'array', items: obj({ title: STR, points: { type: 'array', items: obj({ text: STR, subs: STRS }) } }) },
+    decisions: STRS,
+    actions: { type: 'array', items: obj({ task: STR, owner: STR, due: STR }) },
+    next: STR,
+    attachments: STRS,
+  });
+
+  function minutesPrompt(text, meta) {
+    const D = KK.date, cal = D.calendarText();
+    const v = s => (s && String(s).trim()) || '(비어 있음 — 글에서 찾아 채워)';
+    const base = meta.date && D.isValid(meta.date) ? D.parse(meta.date) : new Date();
+    const days = [];
+    for (let i = 0; i < 35; i++) { const d = D.addDays(base, i); days.push(D.ymd(d) + ' (' + D.DOW[d.getDay()] + ')' + (i === 0 ? ' ← 회의 날' : '')); }
+    return [
+      '아래는 회의를 녹음해 글로 옮긴 녹취록과 회의 중에 적은 메모야. 이걸로 병원 내부 보고용 회의록을 간결하게 정리해 줘.',
+      '',
+      '회의 기본 정보 (사용자가 적은 값):',
+      '- 회의명: ' + v(meta.title),
+      '- 일시: ' + v(meta.when),
+      '- 장소: ' + v(meta.place),
+      '- 참석자: ' + v(meta.attendees),
+      '',
+      '오늘: ' + cal.now + ' (한국 시간). 회의 날짜: ' + (meta.date || '알 수 없음') + '. "다음 주 금요일" 같은 말은 회의 날짜를 기준으로 계산해.',
+      '날짜 참고표:',
+      days.join('\n'),
+      '',
+      '쓰는 법',
+      '- 문체는 개조식 명사형 종결(~함, ~임, ~예정, ~필요). 존댓말·구어체·"~했습니다"는 쓰지 마.',
+      '- 간결하게. summary는 회의 전체의 핵심 3~5개, 각 60자 이내.',
+      '- agenda는 다룬 주제(안건)별로 묶어. 안건마다 points 2~5개, 각 1~2줄. subs는 꼭 필요한 세부만 0~3개.',
+      '- 인사·잡담·같은 말 반복·말 더듬은 빼고, 결정·합의·수치·일정·담당 위주로 남겨.',
+      '- 녹취록은 음성 인식이라 잘못 옮긴 말이 있을 수 있어. 문맥으로 바로잡되, 확실하지 않은 이름·숫자·날짜는 뒤에 "(확인 필요)"를 붙여.',
+      '- 글에 없는 내용은 지어내지 마.',
+      '- 환자 이름·등록번호·생년월일·연락처 같은 개인정보가 나오면 "환자 A"처럼 가려서 적어.',
+      '- 날짜는 "11. 14.(금)"처럼, 시간은 "14:00"처럼 적어.',
+      '- agenda의 title은 안건 이름만(번호 없이). points.text와 subs 앞에 ○, -, 번호 같은 기호를 붙이지 마.',
+      '- decisions: 회의에서 정해진 것만. 없으면 [].',
+      '- actions: 누가 언제까지 무엇을 하기로 했는지. task는 할 일, owner는 담당(부서·사람), due는 기한. 모르는 칸은 "".',
+      '- next: 다음 회의 일정이 나오면 한 줄로, 없으면 "".',
+      '- attachments: 회의에서 나눠 준 자료나 참고한 문서 이름. 없으면 [].',
+      '- title: 사용자가 회의명을 적었으면 그대로, 아니면 글에서 알 수 있는 회의 이름(30자 이내). "회의록"이라는 말은 붙이지 마.',
+      '- place·attendees: 사용자가 적었으면 그대로, 아니면 글에서 확인되는 것만(참석자는 부서·직위·이름을 쉼표로). 모르면 "".',
+      '',
+      '녹취록·메모:',
+      '"""',
+      text.trim(),
+      '"""',
+    ].join('\n');
+  }
+
   KK.claude = {
+    /* 회의록: 녹취록·메모 글 → 회의록 내용(JSON) */
+    async minutes({ apiKey, model, effort, text, meta, signal }) {
+      const out = await call({
+        apiKey, model, effort, signal, schema: MINUTES_SCHEMA, maxTokens: 20000,
+        content: [{ type: 'text', text: minutesPrompt(text, meta || {}) }],
+        useFallback: FALLBACK_MODELS.includes(model),
+      });
+      if (out.stop === 'max_tokens') throw fail('bad_output', '회의록이 너무 길어 결과가 잘렸어요');
+      const r = parseJSON(out.text);
+      const str = v => (typeof v === 'string' ? v.trim() : '');
+      const arr = v => (Array.isArray(v) ? v : []);
+      const strs = v => arr(v).map(str).filter(Boolean);
+      return {
+        title: str(r.title).slice(0, 80),
+        place: str(r.place).slice(0, 80),
+        attendees: str(r.attendees).slice(0, 400),
+        summary: strs(r.summary).slice(0, 7),
+        agenda: arr(r.agenda).map(a => ({
+          title: str(a && a.title),
+          points: arr(a && a.points).map(p => ({ text: str(p && p.text), subs: strs(p && p.subs) })).filter(p => p.text || p.subs.length),
+        })).filter(a => a.title || a.points.length),
+        decisions: strs(r.decisions),
+        actions: arr(r.actions).map(a => ({ task: str(a && a.task), owner: str(a && a.owner), due: str(a && a.due) })).filter(a => a.task),
+        next: str(r.next),
+        attachments: strs(r.attachments),
+      };
+    },
+
     /* file: 삼성 노트에서 가져온 파일 {kind:'document'|'image', media_type, data(base64)} */
     async organize({ apiKey, model, effort, text, imageB64, file, existing, signal }) {
       const content = [];

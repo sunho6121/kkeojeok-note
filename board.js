@@ -71,15 +71,19 @@ window.KK = window.KK || {};
     .filter(i => !i.deleted && i.type === 'task' && !i.board && ['todo', 'doing', 'hold'].includes(i.status || 'todo'))
     .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.createdAt - b.createdAt);
 
-  /* 올린 업무의 상태·기한·제목이 바뀌면 보드에도 (설정에서 끌 수 있음) */
+  /* ---------- 끄적노트 → 보드: 상태·기한·제목이 바뀌면 보드에도 (설정에서 끌 수 있음) ----------
+     it.board.fp  = 마지막으로 맞췄을 때의 끄적노트 쪽 지문(보드 말로 바꾼 값)
+     it.board.bfp = 마지막으로 맞췄을 때의 보드 쪽 지문 */
   const fp = it => [statusOf(it), it.date || '', it.title].join('|');
+  const bfp = t => [t.status || '', t.due || '', t.task || ''].join('|');
+  const keyOf = it => it.board.ext || String(it.board.id || '');
   async function sync(items) {
     if (!ready() || !cfg().auto) return;
-    const list = (items || []).filter(i => i && i.board && !i.deleted && fp(i) !== i.board.fp);
+    const list = (items || []).filter(i => i && i.board && !i.board.gone && !i.deleted && keyOf(i) && fp(i) !== i.board.fp);
     for (const it of list) {
       try {
-        await call('PATCH', '/api/ext/tasks/' + encodeURIComponent(it.board.ext), { status: statusOf(it), due: it.date || '', due_label: dueLabel(it.date), task: it.title.slice(0, 120) });
-        it.board.fp = fp(it); it.board.dirty = false; it.board.at = Date.now();
+        await call('PATCH', '/api/ext/tasks/' + encodeURIComponent(keyOf(it)), { status: statusOf(it), due: it.date || '', due_label: dueLabel(it.date), task: it.title.slice(0, 120) });
+        it.board.fp = fp(it); it.board.bfp = fp(it); it.board.label = statusOf(it); it.board.dirty = false; it.board.at = Date.now();
       } catch (e) {
         if (e.code === 'not_found') { it.board.gone = true; it.board.fp = fp(it); } // 보드에서 지운 업무
         else it.board.dirty = true;
@@ -90,7 +94,88 @@ window.KK = window.KK || {};
   function flush() {
     if (!ready() || !navigator.onLine) return;
     sync([...A().S.items.values()].filter(i => i.board && (i.board.dirty || fp(i) !== i.board.fp)));
+    pull();
   }
+
+  /* ---------- 보드 → 끄적노트: 보드에서 바뀐 상태·기한을 받고, 내 담당 업무를 가져온다 ---------- */
+  const BACK = { '예정': 'todo', '진행 중': 'doing', '대기': 'hold', '확인 필요': 'todo', '지연': 'todo', '완료': 'done', '취소': 'cancel' };
+  const norm = s => String(s || '').replace(/\s+/g, '');
+  const mine = (owner, me) => !!me && norm(owner).includes(norm(me));
+  let pulling = false, lastPull = 0, pullState = '';
+  function curNoteId() {
+    const S = A().S, cm = KK.work ? KK.work.curYM() : '';
+    const n = S.cur && S.notes.get(S.cur);
+    if (n && !n.closed && (!cm || n.month === cm)) return n.id;
+    const m = [...S.notes.values()].filter(x => !x.closed && !x.imported && (!cm || x.month === cm)).sort((a, b) => a.createdAt - b.createdAt)[0];
+    return m ? m.id : (n ? n.id : '');
+  }
+  function applyBoard(it, t, now) {
+    const st = BACK[t.status] || 'todo';
+    if (t.task) it.title = String(t.task).slice(0, 120);
+    it.date = D.isValid(t.due || '') ? t.due : '';
+    if (st !== (it.status || 'todo')) { it.status = st; it.statusAt = now; it.doneAt = st === 'done' ? now : 0; }
+    if (t.priority) it.priority = t.priority === '높음' ? 'high' : 'normal';
+    it.updatedAt = now;
+  }
+  async function pull(force) {
+    if (!ready() || pulling || !navigator.onLine) return;
+    if (!force && Date.now() - lastPull < 60e3) return;
+    pulling = true;
+    try {
+      const r = await call('GET', '/api/ext/tasks');
+      lastPull = Date.now(); pullState = 'ok';
+      reconcile(Array.isArray(r.tasks) ? r.tasks : []);
+    } catch (e) {
+      pullState = (e.code === 'not_ready' || e.code === 'not_found' || e.code === 'server') ? 'old' : 'err'; // old: 보드에 목록 읽기가 아직 없음
+    } finally { pulling = false; if (KK.work) KK.work.render(); }
+  }
+  function reconcile(list) {
+    const S = A().S, now = Date.now(), changed = [], me = (cfg().owner || '').trim();
+    const byExt = new Map(), byId = new Map();
+    list.forEach(t => { if (t.ext_id) byExt.set(String(t.ext_id), t); if (t.id != null) byId.set(String(t.id), t); });
+    const seen = new Set();
+    let updated = 0, added = 0;
+    [...S.items.values()].filter(i => i.board).forEach(it => {
+      const t = (it.board.ext && byExt.get(it.board.ext)) || (it.board.id != null && it.board.id !== '' && byId.get(String(it.board.id)));
+      if (!t) {
+        if (it.deleted) return;
+        if (it.board.src === 'board') { it.deleted = true; it.deletedAt = now; changed.push(it); } // 보드에서 지운 업무는 끄적노트에서도 지움
+        else if (!it.board.gone) { it.board.gone = true; changed.push(it); }
+        return;
+      }
+      seen.add(String(t.id));
+      if (it.deleted) return; // 끄적노트에서 지운 것은 다시 가져오지 않음
+      if (!it.board.id) it.board.id = t.id;
+      if (it.board.label !== t.status) { it.board.label = t.status; changed.includes(it) || changed.push(it); }
+      if (bfp(t) !== it.board.bfp) { // 보드에서 바뀜 → 끄적노트에 반영 (보드 쪽이 이김)
+        applyBoard(it, t, now);
+        it.board.bfp = bfp(t); it.board.fp = fp(it); it.board.gone = false; it.board.dirty = false;
+        changed.includes(it) || changed.push(it); updated++;
+      }
+    });
+    if (A().settings.boardPull !== false && me) {
+      const noteId = curNoteId();
+      list.forEach(t => {
+        if (seen.has(String(t.id)) || (t.ext_id && byExt.has(String(t.ext_id)) && String(t.ext_id).startsWith('kk-'))) return; // 끄적노트에서 올린 것(다른 기기 포함)은 건너뜀
+        if (['완료', '취소'].includes(t.status) || !mine(t.owner, me)) return;
+        const it = {
+          id: 't-' + KK.uid(), kind: 'item', noteId, type: 'task', title: String(t.task || '').slice(0, 120), date: '', time: '', endTime: '', place: '', to: '',
+          priority: 'normal', detail: [t.area, t.category].filter(Boolean).join(' · '), status: 'todo', locked: false, deleted: false,
+          createdAt: now, updatedAt: now, doneAt: 0, source: 'board', board: { id: t.id, ext: '', src: 'board', label: t.status, at: now },
+        };
+        applyBoard(it, t, now);
+        it.board.bfp = bfp(t); it.board.fp = fp(it);
+        if (!it.title) return;
+        S.items.set(it.id, it); changed.push(it); added++;
+      });
+    }
+    if (changed.length) { db.putMany(changed); A().renderAll(); }
+    if (added || updated) toast(['업무보드에서', added ? '내 담당 업무 ' + added + '건을 가져오고' : '', updated ? '바뀐 업무 ' + updated + '건을 맞췄어요' : ''].filter(Boolean).join(' ').replace(/가져오고$/, '가져왔어요'), null, null, 6000);
+  }
+  // 앱을 보고 있는 동안 5분마다 보드에서 받아 온다
+  setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 5 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
+  const status = () => ({ state: pullState, at: lastPull });
 
   /* ---------- 올리기 창 ---------- */
   let picks = [];
@@ -142,7 +227,7 @@ window.KK = window.KK || {};
           ext_id: extId(it), task: it.title.slice(0, 120), owner, area, category: p.cat, priority: it.priority === 'high' ? '높음' : '보통',
           due: it.date || '', due_label: dueLabel(it.date), status: statusOf(it), note: (it.detail || '').slice(0, 300),
         });
-        it.board = { ext: extId(it), id: r.id || '', at: Date.now(), fp: fp(it) };
+        it.board = { ext: extId(it), id: r.id || '', at: Date.now(), fp: fp(it), bfp: fp(it), label: statusOf(it), src: 'kk' };
         db.put(it); ok++;
         p.done = true;
       } catch (e) { failed = e; break; }
@@ -151,7 +236,7 @@ window.KK = window.KK || {};
     renderList();
     if (KK.work) KK.work.render();
     if (failed) setMsg((ok ? ok + '건은 올렸어요. ' : '') + errText(failed), 'err');
-    else { setMsg(ok + '건을 업무보드에 올렸어요.', 'ok'); toast('업무보드에 ' + ok + '건을 올렸어요', '보드 열기', () => window.open(cfg().url, '_blank', 'noopener'), 7000); }
+    else { setMsg(ok + '건을 업무보드에 올렸어요.', 'ok'); pull(true); toast('업무보드에 ' + ok + '건을 올렸어요', '보드 열기', () => window.open(cfg().url, '_blank', 'noopener'), 7000); }
   }
   $('bGo').addEventListener('click', upload);
   $('bClose').addEventListener('click', () => $('dlgBoard').close());
@@ -167,5 +252,5 @@ window.KK = window.KK || {};
     } catch (e) { msgEl.className = 'errmsg'; msgEl.textContent = errText(e); }
   }
 
-  KK.board = { DEFAULT_URL, ready, openUpload, sync, flush, test, candidates, statusOf };
+  KK.board = { DEFAULT_URL, ready, openUpload, sync, flush, pull, status, test, candidates, statusOf };
 })();

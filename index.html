@@ -686,7 +686,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="sep"></div>
     <div>
       <h3>업무보드 연결</h3>
-      <p>끄적노트의 할 일을 공공보건의료사업팀 업무보드 '업무 목록'에 올려요. 연결 키는 업무보드에서 받아 여기에 붙여넣어요(채팅에는 붙여넣지 마세요).</p>
+      <p>끄적노트의 할 일을 공공보건의료사업팀 업무보드 '업무 목록'에 올리고, 보드에서 바뀐 상태와 내 담당 업무를 받아 와요. 연결 키는 업무보드에서 받아 여기에 붙여넣어요(채팅에는 붙여넣지 마세요).</p>
     </div>
     <label>업무보드 주소<input type="text" id="boardUrl" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <div style="display:grid;gap:6px">
@@ -695,6 +695,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     </div>
     <label>담당 (보드에 표시할 내 이름)<input type="text" id="boardOwner" maxlength="40" autocomplete="off"></label>
     <label class="chkrow" for="boardAuto"><input type="checkbox" id="boardAuto"> 올린 업무의 상태·기한이 바뀌면 보드에도 맞추기</label>
+    <label class="chkrow" for="boardPull"><input type="checkbox" id="boardPull"> 보드에서 바뀐 상태를 받고, 내 담당 업무(담당에 내 이름이 있는 업무)를 가져오기</label>
     <div class="row"><button type="button" class="btn" id="btnBoardPaste">키 붙여넣기</button><button type="button" class="btn" id="btnBoardTest">연결 테스트</button><span id="boardMsg"></span></div>
     <div class="sep"></div>
     <div>

@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app', boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app', boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -41,6 +41,7 @@
     if (v === 'notes') V.renderNotes();
     if (v === 'memo') V.renderMemo();
     if (v === 'work' && KK.work) KK.work.render();
+    if (v === 'work' && KK.board) KK.board.pull();
     if (v === 'rec' && KK.voice) KK.voice.renderList();
     if (v !== 'rec') S.recNote = null;
     lsSet('kk-view', v);
@@ -481,7 +482,7 @@
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
     $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false; $('setRecWith').value = settings.recWith === 'web' ? 'web' : 'app';
     $('boardUrl').value = settings.boardUrl || (KK.board ? KK.board.DEFAULT_URL : ''); $('boardKey').value = settings.boardKey || ''; $('boardOwner').value = settings.boardOwner || '';
-    $('boardAuto').checked = settings.boardAuto !== false; $('boardMsg').textContent = '';
+    $('boardAuto').checked = settings.boardAuto !== false; $('boardPull').checked = settings.boardPull !== false; $('boardMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
     V.renderGcalSettings();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
@@ -489,7 +490,7 @@
   function readSettingsForm() {
     settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
     settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.recWith = $('setRecWith').value;
-    settings.boardUrl = $('boardUrl').value.trim(); settings.boardKey = $('boardKey').value.replace(/\s+/g, ''); settings.boardOwner = $('boardOwner').value.trim(); settings.boardAuto = $('boardAuto').checked;
+    settings.boardUrl = $('boardUrl').value.trim(); settings.boardKey = $('boardKey').value.replace(/\s+/g, ''); settings.boardOwner = $('boardOwner').value.trim(); settings.boardAuto = $('boardAuto').checked; settings.boardPull = $('boardPull').checked;
     saveSettings();
   }
   const KEY_RE = /sk-ant-[A-Za-z0-9_\-]{20,}/;

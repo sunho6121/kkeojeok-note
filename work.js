@@ -183,6 +183,7 @@ window.KK = window.KK || {};
           it.type === 'notice' ? h('em', null, '전달') : null,
           it.source === 'minutes' ? h('em', null, '회의') : null,
           it.board && !it.board.gone ? h('em', { class: 'go' }, '보드') : null,
+          it.board && !it.board.gone && ['확인 필요', '지연'].includes(it.board.label) && st !== 'done' ? h('em', null, '보드: ' + it.board.label) : null,
           st === 'doing' ? h('em', { class: 'go' }, '진행중') : null,
           st === 'hold' ? h('em', null, '보류') : null)),
       h('span', { class: 'wdate' + (vs === 'late' ? ' late' : '') }, st === 'done' ? (it.doneAt ? mdT(it.doneAt) : '') : when));
@@ -211,7 +212,8 @@ window.KK = window.KK || {};
       h('button', { class: 'btn ghost nav', 'aria-label': '다음 달', disabled: isCur, onclick: () => { view = addMonth(view, 1); render(); } }, '›'),
       isCur ? null : h('button', { class: 'linkbtn', onclick: () => { view = cur; render(); } }, '이번 달로'),
       isCur && KK.board ? h('button', { class: 'btn', style: 'margin-left:auto', onclick: () => KK.board.openUpload() },
-        '업무보드에 올리기' + (KK.board.candidates().length ? ' · ' + KK.board.candidates().length : '')) : null));
+        '업무보드에 올리기' + (KK.board.candidates().length ? ' · ' + KK.board.candidates().length : '')) : null,
+      isCur && KK.board && KK.board.ready() ? boardSyncBtn() : null));
 
     const work = [...S.items.values()].filter(isWork);
     const byDate = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.createdAt - b.createdAt;
@@ -256,6 +258,14 @@ window.KK = window.KK || {};
 
     box.append(h('div', { class: 'wcols' }, left, right));
     box.append(summaryCard(view, isCur));
+  }
+
+  // 보드와 맞춘 시각 · 누르면 지금 받아 오기
+  function boardSyncBtn() {
+    const st = KK.board.status();
+    const label = st.state === 'ok' && st.at ? '보드 ' + D.pad(new Date(st.at).getHours()) + ':' + D.pad(new Date(st.at).getMinutes()) + ' 맞춤'
+      : st.state === 'old' ? '보드에서 받기 준비 중' : '보드에서 받기';
+    return h('button', { class: 'linkbtn', style: 'margin-left:4px', title: '업무보드의 바뀐 상태와 내 담당 업무를 지금 받아 와요', onclick: () => KK.board.pull(true) }, '↻ ' + label);
   }
 
   function summaryCard(m, isCur) {

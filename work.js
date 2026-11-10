@@ -182,6 +182,7 @@ window.KK = window.KK || {};
         h('span', { class: 'wtag' },
           it.type === 'notice' ? h('em', null, '전달') : null,
           it.source === 'minutes' ? h('em', null, '회의') : null,
+          it.board && !it.board.gone ? h('em', { class: 'go' }, '보드') : null,
           st === 'doing' ? h('em', { class: 'go' }, '진행중') : null,
           st === 'hold' ? h('em', null, '보류') : null)),
       h('span', { class: 'wdate' + (vs === 'late' ? ' late' : '') }, st === 'done' ? (it.doneAt ? mdT(it.doneAt) : '') : when));
@@ -205,10 +206,12 @@ window.KK = window.KK || {};
 
     // 머리줄: 달 넘기기
     box.append(h('div', { class: 'whead' },
-      h('button', { class: 'btn ghost', 'aria-label': '이전 달', disabled: view <= first, onclick: () => { view = addMonth(view, -1); render(); } }, '‹'),
+      h('button', { class: 'btn ghost nav', 'aria-label': '이전 달', disabled: view <= first, onclick: () => { view = addMonth(view, -1); render(); } }, '‹'),
       h('h2', null, monthLabel(view)),
-      h('button', { class: 'btn ghost', 'aria-label': '다음 달', disabled: isCur, onclick: () => { view = addMonth(view, 1); render(); } }, '›'),
-      isCur ? null : h('button', { class: 'linkbtn', onclick: () => { view = cur; render(); } }, '이번 달로')));
+      h('button', { class: 'btn ghost nav', 'aria-label': '다음 달', disabled: isCur, onclick: () => { view = addMonth(view, 1); render(); } }, '›'),
+      isCur ? null : h('button', { class: 'linkbtn', onclick: () => { view = cur; render(); } }, '이번 달로'),
+      isCur && KK.board ? h('button', { class: 'btn', style: 'margin-left:auto', onclick: () => KK.board.openUpload() },
+        '업무보드에 올리기' + (KK.board.candidates().length ? ' · ' + KK.board.candidates().length : '')) : null));
 
     const work = [...S.items.values()].filter(isWork);
     const byDate = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.createdAt - b.createdAt;

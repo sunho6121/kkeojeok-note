@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app' };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app', boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -321,6 +321,7 @@
       S.items.set(doc.id, doc); changed.push(doc); live.add(k); added++;
     });
     db.putMany([n, ...changed]);
+    if (KK.board) KK.board.sync(changed);
     return { added, updated };
   }
 
@@ -328,6 +329,7 @@
   async function processQueue() {
     if (KK.minutes) KK.minutes.resume();   // 기다리던 자동 회의록
     if (KK.work) KK.work.processMonths(); // 기다리던 월간 업무 요약
+    if (KK.board) KK.board.flush();       // 보드에 못 맞춘 상태
     if (queueRunning || !navigator.onLine || !settings.apiKey) return;
     queueRunning = true;
     try {
@@ -352,6 +354,7 @@
     it.doneAt = s === 'done' ? now : 0;
     db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render();
     if (KK.gcal) KK.gcal.syncSoon();
+    if (KK.board) KK.board.sync([it]);
   }
   function deleteItem(it) {
     it.deleted = true; it.deletedAt = Date.now();
@@ -477,13 +480,17 @@
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
     $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false; $('setRecWith').value = settings.recWith === 'web' ? 'web' : 'app';
+    $('boardUrl').value = settings.boardUrl || (KK.board ? KK.board.DEFAULT_URL : ''); $('boardKey').value = settings.boardKey || ''; $('boardOwner').value = settings.boardOwner || '';
+    $('boardAuto').checked = settings.boardAuto !== false; $('boardMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
     V.renderGcalSettings();
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
     settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
-    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.recWith = $('setRecWith').value; saveSettings();
+    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.recWith = $('setRecWith').value;
+    settings.boardUrl = $('boardUrl').value.trim(); settings.boardKey = $('boardKey').value.replace(/\s+/g, ''); settings.boardOwner = $('boardOwner').value.trim(); settings.boardAuto = $('boardAuto').checked;
+    saveSettings();
   }
   const KEY_RE = /sk-ant-[A-Za-z0-9_\-]{20,}/;
   function keyMsg(ok, text) { const m = $('keyMsg'); m.className = ok ? 'okmsg' : 'errmsg'; m.textContent = text; }
@@ -525,6 +532,11 @@
     keyMsg(false, '노트에서 키를 찾지 못했어요. 쓰기 화면의 노트에 키를 붙여넣은 뒤 다시 눌러 주세요.');
   });
   dlg.addEventListener('close', () => { readSettingsForm(); V.renderResult(); processQueue(); });
+  $('btnBoardTest').addEventListener('click', () => { readSettingsForm(); if (KK.board) KK.board.test($('boardMsg')); });
+  $('btnBoardPaste').addEventListener('click', async () => {
+    try { const t = (await navigator.clipboard.readText() || '').replace(/\s+/g, ''); if (t) { $('boardKey').value = t; $('boardMsg').className = 'okmsg'; $('boardMsg').textContent = '붙여넣었어요. 연결 테스트를 눌러 보세요.'; } }
+    catch (e) { $('boardMsg').className = 'errmsg'; $('boardMsg').textContent = '클립보드를 읽을 수 없어요. 입력칸을 길게 눌러 붙여넣어 주세요.'; }
+  });
   $('btnTestKey').addEventListener('click', async () => {
     readSettingsForm();
     const msg = $('keyMsg');
@@ -860,7 +872,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos };
+  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {

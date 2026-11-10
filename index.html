@@ -274,13 +274,22 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .srline{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-size:15px;margin-top:6px;overflow-wrap:anywhere}
 .srline mark{background:var(--mark);color:var(--mark-ink);border-radius:3px;padding:0 1px}
 #dlgSearch{width:min(720px,calc(100vw - 32px))}
+#dlgBoard{width:min(760px,calc(100vw - 24px))}
+.blist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;max-height:46vh;overflow:auto}
+.blist li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 10px;border-top:1px solid var(--rule)}
+.blist li:first-child{border-top:0}
+.blist input[type=checkbox]{width:20px;height:20px}
+.blist .bt{font-size:15px;overflow-wrap:anywhere}
+.blist .bt small{margin-left:8px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.blist select{min-height:38px;font-size:13.5px;max-width:42vw}
+.dlg input#boardKey{font-family:var(--f-mono);font-size:14px}
 /* 업무 탭 — 할 일 / 한 일 / 월간 요약. 단순하게 */
 #vWork{overflow:auto}
 .work{width:100%;max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-bottom:24px}
 .whead{display:flex;align-items:center;gap:4px}
 .whead h2{font-family:var(--f-display);font-size:22px;margin:0 6px}
-.whead .btn{min-width:46px;font-size:24px;padding:0 10px;line-height:1}
-.whead .btn:disabled{opacity:.25;cursor:default}
+.whead .nav{min-width:46px;font-size:24px;padding:0 10px;line-height:1}
+.whead .nav:disabled{opacity:.25;cursor:default}
 .wcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
 @media (max-width:820px){.wcols{grid-template-columns:minmax(0,1fr)}}
 .wcol{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:14px 12px 6px 14px;display:grid;gap:12px}
@@ -585,6 +594,20 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   </form>
 </dialog>
 
+<dialog id="dlgBoard" aria-labelledby="bHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="bHead">업무보드에 올리기</h2><button type="button" class="btn ghost" id="bClose">닫기</button></div>
+    <p>고른 할 일을 공공보건의료사업팀 업무보드의 <b>업무 목록</b>에 올려요. 올린 뒤에 끄적노트에서 상태(진행·완료 등)나 기한이 바뀌면 보드에도 맞춰져요.</p>
+    <div class="m2">
+      <label>담당<input type="text" id="bOwner" maxlength="40" autocomplete="off" placeholder="예: 이름"></label>
+      <label>사업 (모두 같을 때)<input type="text" id="bArea" maxlength="40" autocomplete="off" placeholder="예: 인력 양성"></label>
+    </div>
+    <div class="row" style="justify-content:space-between"><b style="font-size:14px">올릴 할 일</b><button type="button" class="linkbtn" id="bAll">모두 선택·해제</button></div>
+    <div id="bList"></div>
+    <div class="mrun"><button type="button" class="btn primary" id="bGo">보드에 올리기</button><span class="mmsg" id="bMsg"></span></div>
+  </form>
+</dialog>
+
 <dialog id="dlgRecSave">
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2>녹음을 저장할까요?</h2>
@@ -662,6 +685,19 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     </label>
     <div class="sep"></div>
     <div>
+      <h3>업무보드 연결</h3>
+      <p>끄적노트의 할 일을 공공보건의료사업팀 업무보드 '업무 목록'에 올려요. 연결 키는 업무보드에서 받아 여기에 붙여넣어요(채팅에는 붙여넣지 마세요).</p>
+    </div>
+    <label>업무보드 주소<input type="text" id="boardUrl" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div style="display:grid;gap:6px">
+      <label for="boardKey">연결 키</label>
+      <input type="text" id="boardKey" class="masked" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="업무보드에서 받은 끄적노트 연결 키">
+    </div>
+    <label>담당 (보드에 표시할 내 이름)<input type="text" id="boardOwner" maxlength="40" autocomplete="off"></label>
+    <label class="chkrow" for="boardAuto"><input type="checkbox" id="boardAuto"> 올린 업무의 상태·기한이 바뀌면 보드에도 맞추기</label>
+    <div class="row"><button type="button" class="btn" id="btnBoardPaste">키 붙여넣기</button><button type="button" class="btn" id="btnBoardTest">연결 테스트</button><span id="boardMsg"></span></div>
+    <div class="sep"></div>
+    <div>
       <h3>노트 관리 · 백업</h3>
       <p>노트는 이 기기 브라우저 저장소에만 있어요. 가끔 백업 파일을 받아 두세요.</p>
     </div>
@@ -682,6 +718,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="views.js"></script>
 <script src="gcal.js"></script>
 <script src="work.js"></script>
+<script src="board.js"></script>
 <script src="app.js"></script>
 <script src="voice.js"></script>
 <script src="hwpx-tpl.js"></script>

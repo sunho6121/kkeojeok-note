@@ -27,7 +27,7 @@
   function renderEditorTop() { V.renderChips(); V.renderResult(); }
   function renderAll() {
     $('todayLabel').textContent = D.longToday();
-    renderEditorTop(); V.renderNotes(); V.renderSched();
+    renderEditorTop(); V.renderNotes(); V.renderSched(); V.renderMemo();
   }
   function setView(v) {
     document.body.dataset.view = v;
@@ -38,6 +38,7 @@
       if (KK.gcal && KK.gcal.ready() && KK.gcal.hasToken()) KK.gcal.fetchEvents().then(() => V.renderSched()).catch(() => {});
     }
     if (v === 'notes') V.renderNotes();
+    if (v === 'memo') V.renderMemo();
     if (v === 'rec' && KK.voice) KK.voice.renderList();
     if (v !== 'rec') S.recNote = null;
     lsSet('kk-view', v);
@@ -69,7 +70,7 @@
     if (id === S.cur && id) { renderEditorTop(); return; }
     flushSave();
     S.cur = id && S.notes.has(id) ? id : null;
-    S.showSummary = false;
+    S.showSummary = false; lastCaret = null;
     const n = curNote();
     titleEl.value = n ? n.title : '';
     bodyEl.value = n ? n.body : '';
@@ -208,7 +209,7 @@
     mine.forEach((it, idx) => {
       const ref = 'e' + (idx + 1);
       refMap[ref] = it;
-      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted });
+      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, to: it.to || '', status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted });
     });
     return { refMap, list };
   }
@@ -269,7 +270,7 @@
     }
   }
 
-  const FIELDS = ['type', 'title', 'date', 'time', 'endTime', 'place', 'priority', 'detail'];
+  const FIELDS = ['type', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail'];
   function applyResult(n, out, hadInk, refMap, hadFile) {
     const now = Date.now();
     const isCur = n.id === S.cur;
@@ -279,7 +280,7 @@
       delete n.importMarker;
     }
     if ((hadInk || hadFile) && out.transcript) {
-      const label = hadFile && !hadInk ? '[삼성 노트에서 가져옴 · ' : '[필기 옮김 · ';
+      const label = hadFile && !hadInk ? (n.imported ? '[삼성 노트에서 가져옴 · ' : '[붙여넣은 이미지 옮김 · ') : '[필기 옮김 · ';
       n.body = ((n.body || '').replace(/\s+$/, '') + '\n\n' + label + D.stamp(now) + ']\n' + out.transcript).replace(/^\s+/, '');
     }
     if (hadFile) { n.hasImport = false; db.del('imp-' + n.id); }
@@ -335,7 +336,7 @@
 
   function setBusy(on, n) {
     $('busy').hidden = !on;
-    $('btnOrganize').hidden = !!on || !$('vbar').hidden;
+    $('btnOrganize').hidden = !!on;
     if (on) $('busyText').textContent = (n && n.id !== S.cur ? '「' + V.noteLabel(n) + '」 ' : '') + 'Claude가 메모를 꼼꼼히 읽고 있어요 · 길면 1분쯤 걸려요';
   }
 
@@ -344,14 +345,14 @@
     const now = Date.now();
     it.status = s; it.locked = true; it.statusAt = now; it.updatedAt = now;
     it.doneAt = s === 'done' ? now : 0;
-    db.put(it); V.renderSched(); V.renderResult();
+    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo();
     if (KK.gcal) KK.gcal.syncSoon();
   }
   function deleteItem(it) {
     it.deleted = true; it.deletedAt = Date.now();
-    db.put(it); V.renderSched(); V.renderResult();
+    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo();
     if (KK.gcal) KK.gcal.syncSoon();
-    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); if (KK.gcal) KK.gcal.syncSoon(); });
+    toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.gcal) KK.gcal.syncSoon(); });
   }
   /* 캘린더(그룹웨어 등) 일정을 끄적노트에서 상태 관리하도록 가져온다 — 캘린더 쪽 일정은 건드리지 않음 */
   function adoptEvent(ev) {
@@ -372,7 +373,7 @@
   function icsEscape(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
   function exportIcs() {
     const from = D.ymd(D.addDays(new Date(), -7));
-    const list = [...S.items.values()].filter(i => !i.deleted && i.date && i.date >= from && ['todo', 'doing'].includes(i.status || 'todo'));
+    const list = [...S.items.values()].filter(i => !i.deleted && (i.type === 'event' || i.type === 'task') && i.date && i.date >= from && ['todo', 'doing'].includes(i.status || 'todo'));
     if (!list.length) { toast('내보낼 날짜 있는 일정이 없어요'); return; }
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kkeojeok//note//KO', 'CALSCALE:GREGORIAN'];
@@ -514,6 +515,11 @@
     V.renderSched();
   }));
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.v)));
+  document.querySelectorAll('#segMemo button').forEach(b => b.addEventListener('click', () => {
+    S.mview = b.dataset.m;
+    document.querySelectorAll('#segMemo button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    V.renderMemo();
+  }));
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSave();
     else if (D.today() !== S.lastDay) { S.lastDay = D.today(); renderAll(); }
@@ -646,6 +652,63 @@
   }
   $('btnImportNote').addEventListener('click', () => $('importNoteFile').click());
   $('importNoteFile').addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) importFiles(fs); });
+
+  /* ---------- 붙여넣기 (다른 앱에서 복사한 글·이미지) ---------- */
+  let lastCaret = null;
+  ['keyup', 'click', 'select', 'input', 'blur'].forEach(ev => bodyEl.addEventListener(ev, () => { lastCaret = bodyEl.selectionEnd; }));
+  const cleanText = t => String(t || '').replace(/\r\n?/g, '\n').replace(/[​-‍﻿]/g, '').replace(/ /g, ' ');
+  function insertText(text) {
+    ensureNote();
+    if (S.mode === 'pen') setMode('type');
+    const v = bodyEl.value;
+    const atEnd = lastCaret == null || lastCaret > v.length;
+    const s = atEnd ? v.length : Math.min(bodyEl.selectionStart, lastCaret), e = atEnd ? v.length : lastCaret;
+    const before = v.slice(0, s);
+    const glue = before && !before.endsWith('\n') && atEnd ? '\n' : '';
+    bodyEl.setRangeText(glue + text, s, e, 'end');
+    lastCaret = bodyEl.selectionEnd;
+    onBodyInput();
+  }
+  async function attachImage(blob) {
+    const n = ensureNote();
+    if (n.hasImport) { toast('정리 대기 중인 첨부가 이미 있어요. 먼저 정리한 뒤 붙여넣어 주세요.'); return; }
+    const data = await imageToJpegB64(blob);
+    if (!data) { toast('이 이미지는 읽을 수 없어요.'); return; }
+    const marker = '[붙여넣은 이미지 · ' + D.stamp(Date.now()) + ' — 정리하면 글자로 옮겨져요]';
+    await db.put({ id: 'imp-' + n.id, kind: 'imp', noteId: n.id, fileKind: 'image', media_type: 'image/jpeg', name: '붙여넣은 이미지', data });
+    n.hasImport = true; n.importMarker = marker;
+    if (S.mode === 'pen') setMode('type');
+    appendToNote(marker); // 표시 줄은 항상 맨 끝 새 줄에
+    lastCaret = bodyEl.value.length;
+    toast('이미지를 붙였어요. 정리하면 Claude가 글자로 옮겨요.');
+  }
+  async function pasteFromClipboard() {
+    let text = '', image = null;
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        for (const ci of await navigator.clipboard.read()) {
+          const imgType = ci.types.find(t => t.startsWith('image/'));
+          if (imgType && !image) image = await ci.getType(imgType);
+          if (ci.types.includes('text/plain') && !text) text = await (await ci.getType('text/plain')).text();
+        }
+      } else text = await navigator.clipboard.readText();
+    } catch (e) {
+      try { text = await navigator.clipboard.readText(); }
+      catch (e2) { toast('클립보드를 읽을 수 없어요. 노트 빈 곳을 길게 눌러 "붙여넣기"를 고르거나, 다른 앱에서 공유 → 끄적노트를 써 주세요.', null, null, 9000); return; }
+    }
+    if (text && text.trim()) { insertText(cleanText(text)); toast('붙여넣었어요'); return; }
+    if (image) { await attachImage(image); return; }
+    toast('클립보드가 비어 있어요. 다른 앱에서 먼저 복사해 주세요.');
+  }
+  // 길게 눌러 붙여넣기·키보드 붙여넣기: 글은 깨끗하게, 이미지는 첨부로
+  bodyEl.addEventListener('paste', e => {
+    const cd = e.clipboardData; if (!cd) return;
+    const txt = cd.getData('text/plain');
+    const img = [...(cd.files || [])].find(f => f.type.startsWith('image/'));
+    if (txt) { e.preventDefault(); lastCaret = bodyEl.selectionEnd; const s = bodyEl.selectionStart; bodyEl.setRangeText(cleanText(txt), s, bodyEl.selectionEnd, 'end'); lastCaret = bodyEl.selectionEnd; onBodyInput(); }
+    else if (img) { e.preventDefault(); attachImage(img); }
+  });
+  $('btnPaste').addEventListener('click', pasteFromClipboard);
 
   /* 받아쓰기·검색에서 쓰는 도우미 */
   function appendToNote(text, sameLine) {

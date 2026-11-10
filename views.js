@@ -15,6 +15,8 @@ window.KK = window.KK || {};
   }
   const notesSorted = () => [...A().S.notes.values()].sort((a, b) => b.updatedAt - a.updatedAt);
   const liveItems = () => [...A().S.items.values()].filter(i => !i.deleted);
+  const isSched = i => i.type === 'event' || i.type === 'task';
+  const schedItems = () => liveItems().filter(isSched);
   const itemsOf = id => liveItems().filter(i => i.noteId === id);
 
   /* ---------- 쓰기 화면 위쪽 ---------- */
@@ -46,7 +48,7 @@ window.KK = window.KK || {};
       bar.append(h('span', null, A().settings.apiKey ? '인터넷이 연결되면 자동으로 정리해요' : '설정에서 API 키를 넣으면 정리돼요'));
       return;
     }
-    const its = itemsOf(n.id), today = D.today();
+    const allIts = itemsOf(n.id), its = allIts.filter(isSched), today = D.today();
     const cnt = s => its.filter(i => viewStatus(i, today) === s).length;
     bar.append(h('span', { class: 'chip' }, '정리됨'), h('span', { class: 'when' }, D.stamp(n.organizedAt)));
     const parts = [];
@@ -55,6 +57,8 @@ window.KK = window.KK || {};
     if (cnt('doing')) parts.push('진행중 ' + cnt('doing'));
     if (cnt('done')) parts.push('완결 ' + cnt('done'));
     if (parts.length) bar.append(h('button', { class: 'more', onclick: () => A().setView('sched') }, parts.join(' · ')));
+    const nN = allIts.filter(i => i.type === 'notice' && (i.status || 'todo') === 'todo').length, nM = allIts.filter(i => i.type === 'memo' && i.status !== 'done').length;
+    if (nN || nM) bar.append(h('button', { class: 'more', onclick: () => A().setView('memo') }, [nN ? '전달 ' + nN : '', nM ? '중요 메모 ' + nM : ''].filter(Boolean).join(' · ')));
     if (n.updatedAt > n.organizedAt + 1500 && !n.pending) bar.append(h('span', { class: 'stale' }, '고친 내용은 다시 정리하면 반영돼요'));
     if ((n.summary && n.summary.length) || (n.tags && n.tags.length)) {
       bar.append(h('button', { class: 'more', 'aria-expanded': String(!!S.showSummary), onclick: () => { S.showSummary = !S.showSummary; renderResult(); } }, S.showSummary ? '요약 접기' : '요약 보기'));
@@ -80,7 +84,7 @@ window.KK = window.KK || {};
     list.forEach(n => {
       const lines = (n.body || '').split('\n').map(s => s.trim()).filter(Boolean);
       const snippet = (n.summary && n.summary[0]) || lines.slice(n.title ? 0 : 1, 3).join(' · ');
-      const its = itemsOf(n.id);
+      const its = itemsOf(n.id).filter(isSched);
       const open = its.filter(i => ['todo', 'doing', 'late'].includes(viewStatus(i, today))).length;
       const chips = [h('span', { class: 'when' }, D.short(n.updatedAt))];
       if (n.pending) chips.push(h('span', { class: 'chip wait' }, '정리 대기'));
@@ -123,7 +127,7 @@ window.KK = window.KK || {};
 
   /* 끄적노트 일정 + 구글 캘린더 일정을 한 줄씩 묶고, 같은 일정은 하나로 합친다 */
   function unifiedRows(today) {
-    const rows = liveItems().map(it => ({
+    const rows = schedItems().map(it => ({
       kind: 'kk', it, date: it.date, time: it.time, endTime: it.endTime, title: it.title, type: it.type,
       place: it.place, detail: it.detail, vs: viewStatus(it, today), srcs: [], dups: 0, link: '', createdAt: it.createdAt,
     }));
@@ -280,26 +284,90 @@ window.KK = window.KK || {};
     $('itTitle').textContent = r.title;
     const src = it ? A().S.notes.get(it.noteId) : null;
     $('itMeta').textContent = [
-      r.kind === 'g' ? '캘린더 일정 (' + r.srcs.join(', ') + ')' : (it.type === 'event' ? '약속' : '할 일'),
+      r.kind === 'g' ? '캘린더 일정 (' + r.srcs.join(', ') + ')' : ({ event: '약속', task: '할 일', notice: '전달사항', memo: '중요 메모' }[it.type] || '할 일') + (it.to ? ' → ' + it.to : ''),
       r.date ? D.dayLabel(r.date) + (r.time ? ' ' + r.time + (r.endTime ? '~' + r.endTime : '') : '') : '날짜 없음',
       r.place, src ? '노트: ' + noteLabel(src) : '',
       r.srcs.length && r.kind === 'kk' ? '캘린더: ' + r.srcs.join(', ') : '',
     ].filter(Boolean).join(' · ') + (r.vs === 'late' ? ' · 기한이 지났어요' : '') + (r.dups ? ' · 같은 일정 ' + (r.dups + 1) + '곳을 하나로 보여 줘요' : '');
     const grid = $('itStatus'); grid.textContent = '';
     $('itStatusBox').hidden = r.kind === 'g';
-    if (it) Object.entries(STATUS).forEach(([k, label]) => grid.append(h('button', {
+    const stList = it && it.type === 'notice' ? NOTICE_ST : it && it.type === 'memo' ? MEMO_ST : Object.entries(STATUS);
+    if (it) stList.forEach(([k, label]) => grid.append(h('button', {
       type: 'button', class: 'st-' + k, 'aria-pressed': String((it.status || 'todo') === k),
       onclick: () => { A().setItemStatus(it, k); $('dlgItem').close(); },
     }, label)));
     const acts = $('itActions'); acts.textContent = '';
     if (r.link) acts.append(h('a', { class: 'btn', href: r.link, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '캘린더에서 보기'));
-    else if (it) { const url = gcalUrl(it); if (url) acts.append(h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '구글 캘린더에 추가')); }
+    else if (it && isSched(it)) { const url = gcalUrl(it); if (url) acts.append(h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '구글 캘린더에 추가')); }
     if (r.kind === 'g') acts.append(h('button', { type: 'button', class: 'btn', onclick: () => { $('dlgItem').close(); A().adoptEvent(r.ev); } }, svg(ICON.plus), '끄적노트에서 상태 관리'));
     if (src) acts.append(h('button', { type: 'button', class: 'btn', onclick: () => { $('dlgItem').close(); A().openNote(src.id); A().setView('write'); } }, svg(ICON.note), '노트로 가기'));
     if (it) acts.append(h('button', { type: 'button', class: 'btn danger', onclick: () => { $('dlgItem').close(); A().deleteItem(it); } }, svg(ICON.trash), '삭제'));
     $('dlgItem').showModal();
   }
   const openItem = it => openRow({ kind: 'kk', it, date: it.date, time: it.time, endTime: it.endTime, title: it.title, type: it.type, place: it.place, vs: viewStatus(it, D.today()), srcs: [], dups: 0, link: '' });
+
+  /* ---------- 전달사항 · 중요 메모 ---------- */
+  const NOTICE_ST = [['todo', '전달 전'], ['done', '전달함'], ['cancel', '필요 없어짐']];
+  const MEMO_ST = [['todo', '중요 메모'], ['done', '보관']];
+
+  function renderMemo() {
+    const S = A().S, today = D.today();
+    const showDone = S.mview === 'done';
+    const all = liveItems();
+    const memos = all.filter(i => i.type === 'memo');
+    const notices = all.filter(i => i.type === 'notice');
+    const openN = notices.filter(i => ['todo', 'doing'].includes(i.status || 'todo'));
+    $('memoTabCnt').textContent = String(openN.length || '');
+
+    // 중요 메모 카드
+    const mbox = $('memoList'); mbox.textContent = '';
+    const mshow = memos.filter(i => (showDone ? i.status === 'done' : (i.status || 'todo') !== 'done'))
+      .sort((a, b) => (b.priority === 'high') - (a.priority === 'high') || (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+    $('memoCount').textContent = mshow.length ? mshow.length + '개' : '';
+    if (!mshow.length) mbox.append(h('p', { class: 'empty' }, showDone ? '보관한 메모가 없어요.' : '아직 중요 메모가 없어요. 노트에 결정된 내용·기준·숫자 같은 주요사항을 적고 정리하면 여기에 모여요.'));
+    mshow.forEach(it => {
+      const src = S.notes.get(it.noteId);
+      mbox.append(h('article', { class: 'mcard' + (it.priority === 'high' ? ' hi' : '') + (it.status === 'done' ? ' done' : '') },
+        h('div', { class: 'mt' }, it.priority === 'high' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger);margin-right:6px' }, '매우 중요') : null, h('span', null, it.title)),
+        it.detail ? h('div', { class: 'md' }, it.detail) : null,
+        h('div', { class: 'it-m' }, h('span', { class: 'when' }, D.short(it.updatedAt || it.createdAt)), src ? h('span', null, '· ' + noteLabel(src)) : null, it.locked ? h('span', null, '· 직접 정함') : null),
+        h('div', { class: 'row' },
+          h('button', { type: 'button', class: 'btn', onclick: () => A().setItemStatus(it, it.status === 'done' ? 'todo' : 'done') }, it.status === 'done' ? '다시 꺼내기' : '보관'),
+          src ? h('button', { type: 'button', class: 'btn', onclick: () => { A().openNote(src.id); A().setView('write'); } }, '노트로 가기') : null,
+          h('button', { type: 'button', class: 'btn danger', onclick: () => A().deleteItem(it) }, '삭제'))));
+    });
+
+    // 전달사항: 대상별로 묶기
+    const nbox = $('noticeList'); nbox.textContent = '';
+    const nshow = notices.filter(i => (showDone ? ['done', 'cancel'].includes(i.status) : ['todo', 'doing', 'hold'].includes(i.status || 'todo')))
+      .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.createdAt - b.createdAt);
+    $('noticeCount').textContent = nshow.length ? nshow.length + '건' : '';
+    if (!nshow.length) { nbox.append(h('p', { class: 'empty' }, showDone ? '전달 완료한 내용이 없어요.' : '전달할 내용이 없어요. 노트에 "○○에게 전달", "공지할 것"처럼 적고 정리하면 대상별로 모여요.')); }
+    const groups = new Map();
+    nshow.forEach(i => { const k = i.to || '대상 미정'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+    [...groups.entries()].sort((a, b) => (a[0] === '대상 미정') - (b[0] === '대상 미정') || a[0].localeCompare(b[0], 'ko')).forEach(([to, list]) => {
+      nbox.append(h('section', { class: 'ngroup' },
+        h('h3', null, '→ ' + to, h('span', { class: 'when' }, list.length + '건')),
+        h('ul', null, list.map(it => {
+          const st = it.status || 'todo';
+          const src = S.notes.get(it.noteId);
+          const late = it.date && it.date < today && st === 'todo';
+          return h('li', { class: 'nrow s-' + st },
+            h('button', { class: 'chk', 'aria-label': st === 'done' ? '전달 안 함으로 되돌리기' : '전달함으로 표시', onclick: () => A().setItemStatus(it, st === 'done' ? 'todo' : 'done') }, h('i', null, svg(ICON.check))),
+            h('button', { class: 'it-main', onclick: () => openItem(it) },
+              h('div', { class: 'it-t' }, it.title),
+              h('div', { class: 'it-m' },
+                it.priority === 'high' && st === 'todo' ? h('span', { class: 'pri' }, '중요') : null,
+                it.date ? h('span', { class: late ? 'pri' : '' }, (late ? '기한 지남 · ' : '기한 ') + D.dayLabel(it.date)) : null,
+                it.detail ? h('span', null, it.detail) : null,
+                src ? h('span', null, '· ' + noteLabel(src)) : null)),
+            h('button', { class: 'st ' + (st === 'done' ? 'done' : st === 'cancel' ? 'cancel' : late ? 'late' : 'todo'), onclick: () => openItem(it) },
+              (NOTICE_ST.find(x => x[0] === st) || NOTICE_ST[0])[1]));
+        }))));
+    });
+  }
+
+
 
   /* ---------- 설정: 구글 캘린더 ---------- */
   function renderGcalSettings() {
@@ -333,5 +401,5 @@ window.KK = window.KK || {};
       '정리한 일정을 구글 캘린더에 자동으로 넣기 (같은 일정이 이미 있으면 넣지 않음)'));
   }
 
-  KK.views = { noteLabel, notesSorted, itemsOf, renderChips, renderResult, renderNotes, renderSched, openItem, gcalUrl, renderGcalSettings, unifiedRows };
+  KK.views = { noteLabel, notesSorted, itemsOf, renderChips, renderResult, renderNotes, renderSched, renderMemo, openItem, gcalUrl, renderGcalSettings, unifiedRows };
 })();

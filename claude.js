@@ -22,10 +22,11 @@ window.KK = window.KK || {};
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'priority', 'detail'],
+          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail'],
           properties: {
             ref: { type: 'string' },
-            type: { type: 'string', enum: ['event', 'task'] },
+            type: { type: 'string', enum: ['event', 'task', 'notice', 'memo'] },
+            to: { type: 'string' },
             status: { type: 'string', enum: ['todo', 'doing', 'hold', 'done', 'cancel'] },
             title: { type: 'string' },
             date: { type: 'string' },
@@ -44,10 +45,11 @@ window.KK = window.KK || {};
 
   function existingText(existing) {
     if (!existing || !existing.length) return '(없음 — 처음 정리하는 노트)';
+    const TYPE_KO = { event: '약속', task: '할 일', notice: '전달사항', memo: '중요 메모' };
     return existing.map(e => [
       e.ref,
-      e.type === 'event' ? '약속' : '할 일',
-      e.title,
+      TYPE_KO[e.type] || '할 일',
+      e.title + (e.to ? ' (대상: ' + e.to + ')' : ''),
       (e.date || '날짜 없음') + (e.time ? ' ' + e.time : ''),
       e.place || '-',
       e.deleted ? '삭제됨 — 사용자가 지움, 다시 만들지 말 것'
@@ -83,11 +85,14 @@ window.KK = window.KK || {};
       '- 해야 할 일, 마감, 제출, 연락할 일은 type "task". 마감일이 있으면 date에 넣어.',
       '- 메모에 없는 내용은 지어내지 마. 알 수 없는 칸은 "" 로 둬.',
       '- 급하다는 표현(급함, 꼭, 중요, !!, ★)이 있으면 priority "high", 아니면 "normal".',
-      '- 일정이나 할 일이 아닌 생각·정보·아이디어는 summary에만 넣어.',
+      '- 다른 사람에게 알려야 할 내용(공지, 지시·요청 전달, "○○에게 전달", "공유할 것", "안내", "전달사항")은 type "notice". to에 대상(사람·부서·전체 등)을, date에 전달 기한이 있으면 넣어. 같은 대상에게 전할 내용이 여러 개면 하나씩 따로.',
+      '- 일정·할 일·전달사항은 아니지만 나중에 꼭 다시 봐야 할 주요사항(결정된 내용, 기준·원칙, 숫자·금액, 연락처, 주의할 점 등)은 type "memo". title은 핵심 한 줄, detail에 설명. 매우 중요하면 priority "high".',
+      '- 사소한 생각이나 이미 일정·메모로 정리된 내용은 summary에만 넣어.',
+      '- notice의 status: todo=아직 전달 안 함, done=전달함, cancel=전달할 필요 없어짐. memo의 status: todo=유효, done=더 이상 필요 없음.',
       '- title은 메모 전체를 대표하는 20자 이내 제목.',
       '- summary는 핵심 1~5개, 각 40자 이내, 개조식(~함, ~임 또는 명사형).',
       '- tags는 주제어 0~3개, 각 6자 이내, # 없이.',
-      '- items의 title은 "누가/무엇을" 알 수 있게 짧게. detail에는 메모에 적힌 보충 설명이나 진행 상황만.',
+      '- items의 title은 "누가/무엇을" 알 수 있게 짧게. detail에는 메모에 적힌 보충 설명이나 진행 상황만. notice가 아니면 to는 "".',
       '',
       '기존 일정과 상태 규칙',
       '- 기존 일정과 같은 일이면 ref에 그 번호(e1 등)를 넣고, 바뀐 내용(날짜·시간·장소·상태 등)을 반영해서 돌려줘. 새로 생긴 일만 ref를 "" 로.',
@@ -99,7 +104,7 @@ window.KK = window.KK || {};
       '- "사용자가 직접 정함" 표시된 일정의 status는 바꾸지 말고 기존 값을 그대로 써.',
       '- "삭제됨" 표시된 일정은 다시 만들지 말고 돌려주지도 마.',
       '',
-      '이 노트의 기존 일정 (번호 | 종류 | 제목 | 날짜 | 장소 | 상태):',
+      '이 노트에서 전에 정리한 항목 (번호 | 종류 | 제목 | 날짜 | 장소 | 상태):',
       existingText(existing),
       attachRule(att),
       '',
@@ -186,7 +191,8 @@ window.KK = window.KK || {};
         tags: arr(r.tags).map(str).map(t => t.replace(/^#/, '')).filter(Boolean).slice(0, 4),
         items: arr(r.items).map(it => ({
           ref: str(it && it.ref),
-          type: it && it.type === 'event' ? 'event' : 'task',
+          type: ['event', 'task', 'notice', 'memo'].includes(it && it.type) ? it.type : 'task',
+          to: str(it && it.to).slice(0, 40),
           status: ['todo', 'doing', 'hold', 'done', 'cancel'].includes(it && it.status) ? it.status : 'todo',
           title: str(it && it.title).slice(0, 80),
           date: KK.date.isValid(str(it && it.date)) ? str(it.date) : '',

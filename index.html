@@ -58,7 +58,12 @@ button{cursor:pointer;border:0;background:none;touch-action:manipulation}
 .sync[data-s="busy"]::before{background:var(--mark)}
 .gear{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
 .gear svg{width:22px;height:22px}
-@media (max-width:900px){.tabs button{min-width:64px;padding:0 12px}}
+@media (max-width:1000px){
+  .tabs button{min-width:0;padding:0 12px}
+  .today{display:none}
+  .sync{font-size:0;gap:0}
+  .gear{width:40px}
+}
 @media (max-width:760px){
   .tabs{order:3;flex-basis:100%;margin:0}
   .tabs button{flex:1;min-width:0}
@@ -67,7 +72,28 @@ button{cursor:pointer;border:0;background:none;touch-action:manipulation}
 }
 
 .view{flex:1;min-height:0;display:none;flex-direction:column;padding:4px max(16px,env(safe-area-inset-right,0px)) 12px var(--gut)}
-body[data-view="write"] #vWrite,body[data-view="sched"] #vSched,body[data-view="notes"] #vNotes,body[data-view="rec"] #vRec{display:flex}
+body[data-view="write"] #vWrite,body[data-view="sched"] #vSched,body[data-view="notes"] #vNotes,body[data-view="rec"] #vRec,body[data-view="memo"] #vMemo{display:flex}
+#vMemo{overflow:auto}
+.vh{font-family:var(--f-display);font-size:19px;margin:6px 0 10px;display:flex;gap:8px;align-items:baseline}
+.msec{display:block}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.mcard{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:6px;align-content:start}
+.mcard .mt{font-weight:600;font-size:16px;line-height:1.45}
+.mcard .mt span{background:linear-gradient(transparent 60%,var(--mark) 60%);padding:0 2px}
+.mcard.hi{border-color:var(--danger)}
+.mcard .md{font-size:14.5px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.mcard .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.mcard .row .btn{min-height:38px;padding:0 12px;font-size:14px}
+.mcard.done{opacity:.65}
+.ngroup h3{margin:0 0 6px;font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.ngroup ul{list-style:none;margin:0;padding:0;background:var(--sheet);border:1px solid var(--line);border-radius:12px}
+.nrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-top:1px solid var(--line)}
+.nrow:first-child{border-top:0}
+.nrow.s-done .it-t,.nrow.s-cancel .it-t{text-decoration:line-through;color:var(--muted)}
+.nrow.s-done .chk i{background:var(--ok);border-color:var(--ok)}
+.nrow.s-done .chk svg{opacity:1}
+.vbar{display:flex;align-items:center;gap:10px;border-radius:12px;padding:6px 8px 6px 12px;font-size:14px;background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger);min-height:48px}
+.vbar .btn{margin-left:auto;min-height:36px}
 #vRec{overflow:auto}
 .rhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .rhead .search{flex:1 1 240px}
@@ -257,6 +283,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   <nav class="tabs" aria-label="화면">
     <button data-v="write" aria-current="page">쓰기</button>
     <button data-v="sched">일정 <span class="cnt" id="tabCnt"></span></button>
+    <button data-v="memo">전달·메모 <span class="cnt" id="memoTabCnt"></span></button>
     <button data-v="notes">노트</button>
     <button data-v="rec">녹음 <span class="cnt" id="recTabCnt"></span></button>
   </nav>
@@ -270,6 +297,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <main class="view" id="vWrite" aria-label="쓰기">
   <div class="edbar">
     <div class="nchips" id="noteChips"></div>
+    <button class="btn" id="btnPaste" title="복사해 둔 글이나 이미지를 노트에 붙여넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg><span class="lbl">붙여넣기</span></button>
     <div class="seg" role="group" aria-label="음성">
       <button id="btnDictate" aria-pressed="false" title="말하면 노트에 글자로 적혀요 (무료)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span class="lbl">받아쓰기</span></button>
       <button id="btnRecord" aria-pressed="false" title="소리를 녹음해 이 노트에 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span class="lbl">녹음</span></button>
@@ -284,6 +312,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <input class="title-in" id="noteTitle" placeholder="제목은 정리할 때 붙어요" autocomplete="off">
     <div class="rbar" id="rbar"></div>
   </div>
+  <div class="vbar" id="vbar" hidden role="status"><span class="vdot"></span><b id="voiceLabel"></b><span id="voiceLive" class="vlive"></span><button class="btn" id="btnVoiceStop">끝내기</button></div>
   <section class="result" id="result" hidden></section>
   <div class="sheet">
     <textarea class="body-in" id="body" spellcheck="false" placeholder="이 노트 하나에 계속 이어서 적으세요. 예)
@@ -304,7 +333,6 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <div class="penhint" id="penHint">S Pen으로 쓰세요. 정리하면 글자로 바뀌어 노트에 붙어요.</div>
     </div>
     <button class="btn primary fab" id="btnOrganize">정리하기</button>
-    <div class="busy vbar" id="vbar" hidden><span class="vdot"></span><b id="voiceLabel"></b><span id="voiceLive" class="vlive"></span><button class="btn" id="btnVoiceStop">끝내기</button></div>
     <div class="busy" id="busy" hidden><span class="spin"></span><span id="busyText">Claude가 메모를 읽고 있어요</span><button class="btn" id="btnStop">중지</button></div>
   </div>
 </main>
@@ -341,6 +369,24 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     </div>
     <ul class="ngrid" id="noteList"></ul>
     <div class="nfoot"><span id="storeNote">노트는 이 태블릿 안에만 저장돼요.</span></div>
+  </div>
+</main>
+
+<main class="view" id="vMemo" aria-label="전달사항과 중요 메모">
+  <div class="sched">
+    <div class="ctrl">
+      <div class="seg" role="group" aria-label="보기" id="segMemo">
+        <button data-m="open" aria-pressed="true">지금 볼 것</button><button data-m="done" aria-pressed="false">전달함·보관</button>
+      </div>
+    </div>
+    <section class="msec">
+      <h2 class="vh">중요 메모 <span class="when" id="memoCount"></span></h2>
+      <div class="mgrid" id="memoList"></div>
+    </section>
+    <section class="msec">
+      <h2 class="vh">전달사항 <span class="when" id="noticeCount"></span></h2>
+      <div id="noticeList" style="display:flex;flex-direction:column;gap:14px"></div>
+    </section>
   </div>
 </main>
 

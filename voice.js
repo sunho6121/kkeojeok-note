@@ -9,16 +9,17 @@
   const fmtSize = b => (b > 1048576 ? (b / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB');
   const defaultName = t => '녹음 ' + D.stamp(t);
 
+  /* 진행 표시는 작성란 위쪽 한 줄에만 — 아래쪽(작성란·정리 버튼)을 가리지 않게 */
   function showBar(kind, label) {
-    $('vbar').className = 'busy vbar' + (kind === 'dict' ? ' dict' : '');
+    $('vbar').className = 'vbar' + (kind === 'dict' ? ' dict' : '');
     $('voiceLabel').textContent = label;
     $('voiceLive').textContent = '';
-    $('vbar').hidden = false; $('btnOrganize').hidden = true;
+    $('vbar').hidden = false;
     $('btnDictate').setAttribute('aria-pressed', String(kind === 'dict'));
     $('btnRecord').setAttribute('aria-pressed', String(kind === 'rec'));
   }
   function hideBar() {
-    $('vbar').hidden = true; $('btnOrganize').hidden = !$('busy').hidden;
+    $('vbar').hidden = true;
     $('btnDictate').setAttribute('aria-pressed', 'false');
     $('btnRecord').setAttribute('aria-pressed', 'false');
   }

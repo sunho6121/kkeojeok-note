@@ -183,7 +183,7 @@ window.KK = window.KK || {};
   }
 
   async function pushItem(it) {
-    const want = !it.deleted && !!it.date && ['todo', 'doing', 'hold', 'done'].includes(it.status || 'todo');
+    const want = !it.deleted && (it.type === 'event' || it.type === 'task') && !!it.date && ['todo', 'doing', 'hold', 'done'].includes(it.status || 'todo');
     if (it.gEventId) {
       const path = '/calendars/' + encodeURIComponent(it.gCalId || 'primary') + '/events/' + encodeURIComponent(it.gEventId);
       if (!want) {

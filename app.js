@@ -359,6 +359,38 @@
     if (KK.gcal) KK.gcal.syncSoon();
     toast('「' + it.title + '」을(를) 지웠어요', '되돌리기', () => { it.deleted = false; it.deletedAt = 0; db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render(); if (KK.gcal) KK.gcal.syncSoon(); });
   }
+  /* 전달사항·중요 메모를 Claude가 개조식으로 간결하게 다듬는다 (지금 보이는 것만, 되돌리기 가능) */
+  async function polishMemos() {
+    if (S.polishing) return;
+    const list = [...S.items.values()].filter(i => !i.deleted && (
+      (i.type === 'notice' && ['todo', 'doing', 'hold'].includes(i.status || 'todo')) || (i.type === 'memo' && i.status !== 'done')));
+    if (!list.length) { toast('다듬을 전달사항·메모가 없어요'); return; }
+    if (!settings.apiKey) { toast('다듬으려면 Claude API 키가 필요해요.', '설정 열기', openSettings); return; }
+    if (!navigator.onLine) { toast('인터넷에 연결되어 있지 않아요.'); return; }
+    S.polishing = true; V.renderMemo();
+    const refMap = {};
+    const items = list.slice(0, 80).map((it, i) => { const ref = 'm' + (i + 1); refMap[ref] = it; return { ref, type: it.type, to: it.to, date: it.date, title: it.title, detail: it.detail }; });
+    try {
+      const out = await KK.claude.polish({ apiKey: settings.apiKey, model: settings.model, effort: settings.effort, items });
+      const now = Date.now(), changed = [], before = new Map();
+      out.forEach(x => {
+        const it = refMap[x.ref]; if (!it) return;
+        const detail = x.points.join('\n');
+        if (it.title === x.title && (it.detail || '') === detail) return;
+        before.set(it.id, { title: it.title, detail: it.detail });
+        it.title = x.title; it.detail = detail; it.updatedAt = now; changed.push(it);
+      });
+      if (changed.length) db.putMany(changed);
+      V.renderMemo(); V.renderResult();
+      toast(changed.length ? changed.length + '건을 개조식으로 간결하게 다듬었어요' : '이미 간결해서 바꿀 게 없었어요', changed.length ? '되돌리기' : null, () => {
+        changed.forEach(it => Object.assign(it, before.get(it.id)));
+        db.putMany(changed); V.renderMemo();
+      }, 9000);
+    } catch (e) {
+      toast(errCopy(e).replace('정리하지 못했어요', '다듬지 못했어요').replace('다시 정리해', '다시 해'), e.code === 'bad_key' ? '설정 열기' : null, openSettings, 7000);
+    } finally { S.polishing = false; V.renderMemo(); }
+  }
+
   /* 캘린더(그룹웨어 등) 일정을 끄적노트에서 상태 관리하도록 가져온다 — 캘린더 쪽 일정은 건드리지 않음 */
   function adoptEvent(ev) {
     const now = Date.now();
@@ -522,6 +554,7 @@
     V.renderSched();
   }));
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.v)));
+  $('btnPolish').addEventListener('click', polishMemos);
   document.querySelectorAll('#segMemo button').forEach(b => b.addEventListener('click', () => {
     S.mview = b.dataset.m;
     document.querySelectorAll('#segMemo button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));

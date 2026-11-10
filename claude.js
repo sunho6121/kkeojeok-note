@@ -93,6 +93,7 @@ window.KK = window.KK || {};
       '- summary는 핵심 1~5개, 각 40자 이내, 개조식(~함, ~임 또는 명사형).',
       '- tags는 주제어 0~3개, 각 6자 이내, # 없이.',
       '- items의 title은 "누가/무엇을" 알 수 있게 짧게. detail에는 메모에 적힌 보충 설명이나 진행 상황만. notice가 아니면 to는 "".',
+      '- notice와 memo는 개조식으로 간결·명료하게: title은 핵심 한 줄 25자 이내, 명사형으로 끝냄(~제출, ~확정, ~필요, ~안내). detail은 꼭 필요한 보충만 줄바꿈(\\n)으로 나눈 1~3줄, 각 40자 이내, ~함·~임·명사형으로 끝냄. 날짜·숫자는 남기고 인사·반복·군더더기는 빼. date·to에 넣은 기한·대상은 detail에 다시 쓰지 마.',
       '',
       '기존 일정과 상태 규칙',
       '- 기존 일정과 같은 일이면 ref에 그 번호(e1 등)를 넣고, 바뀐 내용(날짜·시간·장소·상태 등)을 반영해서 돌려줘. 새로 생긴 일만 ref를 "" 로.',
@@ -253,7 +254,40 @@ window.KK = window.KK || {};
     ].join('\n');
   }
 
+  /* ---------- 전달사항·중요 메모 다듬기 (개조식) ---------- */
+  const POLISH_SCHEMA = obj({ items: { type: 'array', items: obj({ ref: STR, title: STR, points: STRS }) } });
+  function polishPrompt(list) {
+    return [
+      '아래는 사용자의 업무 노트에서 뽑은 전달사항과 중요 메모야. 각 항목을 핵심만 남겨 간결·명료한 개조식으로 다시 써 줘.',
+      '',
+      '쓰는 법',
+      '- title: 핵심 한 줄, 25자 이내. 명사형으로 끝내(~제출, ~확정, ~필요, ~안내, ~변경). "~합니다", "~해야 함" 같은 문장형은 쓰지 마.',
+      '- points: 꼭 필요한 보충만 0~3개, 각 40자 이내. ~함·~임·명사형으로 끝내. 제목과 같은 말을 되풀이하지 마. 기한과 대상은 화면에 따로 나오니 points에 다시 쓰지 마.',
+      '- 날짜·숫자·금액·대상·장소는 그대로 남기고, 인사·반복·군더더기는 빼.',
+      '- 원래 내용에 없는 사실을 더하거나 숫자·날짜·이름을 바꾸지 마.',
+      '- ref는 받은 그대로 쓰고, 받은 항목을 모두 돌려줘.',
+      '',
+      '항목 (ref | 종류 | 대상 | 기한 | 제목 | 내용):',
+      list.map(i => [i.ref, i.type === 'notice' ? '전달사항' : '중요 메모', i.to || '-', i.date || '-', i.title, (i.detail || '-').replace(/\n/g, ' / ')].join(' | ')).join('\n'),
+    ].join('\n');
+  }
+
   KK.claude = {
+    /* 전달사항·중요 메모를 개조식으로 다듬기: [{ref,type,to,date,title,detail}] → [{ref,title,points}] */
+    async polish({ apiKey, model, effort, items, signal }) {
+      const out = await call({
+        apiKey, model, effort, signal, schema: POLISH_SCHEMA, maxTokens: 12000,
+        content: [{ type: 'text', text: polishPrompt(items) }],
+        useFallback: FALLBACK_MODELS.includes(model),
+      });
+      if (out.stop === 'max_tokens') throw fail('bad_output', '항목이 너무 많아 결과가 잘렸어요');
+      const r = parseJSON(out.text);
+      const str = v => (typeof v === 'string' ? v.trim() : '');
+      return (Array.isArray(r.items) ? r.items : []).map(x => ({
+        ref: str(x && x.ref), title: str(x && x.title).slice(0, 60),
+        points: (Array.isArray(x && x.points) ? x.points : []).map(str).filter(Boolean).slice(0, 4).map(s => s.replace(/^[-○•·]\s*/, '')),
+      })).filter(x => x.ref && x.title);
+    },
     /* 월간 업무 요약: 한 달 기록 → { headline, areas, done, carry, notes } */
     async monthly({ apiKey, model, effort, label, text, partial, signal }) {
       const out = await call({

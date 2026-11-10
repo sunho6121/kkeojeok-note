@@ -82,6 +82,7 @@ body[data-view="write"] #vWrite,body[data-view="work"] #vWork,body[data-view="sc
 .mcard .mt span{background:linear-gradient(transparent 60%,var(--mark) 60%);padding:0 2px}
 .mcard.hi{border-color:var(--danger)}
 .mcard .md{font-size:14.5px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.mcard .mdl{margin:0;padding-left:18px;font-size:14.5px;display:grid;gap:2px;overflow-wrap:anywhere}
 .mcard .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .mcard .row .btn{min-height:38px;padding:0 12px;font-size:14px}
 .mcard.done{opacity:.65}
@@ -380,7 +381,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <button data-v="write" aria-current="page">쓰기</button>
     <button data-v="work">업무 <span class="cnt" id="workTabCnt"></span></button>
     <button data-v="sched">일정 <span class="cnt" id="tabCnt"></span></button>
-    <button data-v="memo">전달<span class="tl">·메모</span> <span class="cnt" id="memoTabCnt"></span></button>
+    <button data-v="memo"><span>전달<span class="tl">·메모</span></span><span class="cnt" id="memoTabCnt"></span></button>
     <button data-v="notes">노트</button>
     <button data-v="rec">녹음 <span class="cnt" id="recTabCnt"></span></button>
   </nav>
@@ -480,6 +481,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <div class="seg" role="group" aria-label="보기" id="segMemo">
         <button data-m="open" aria-pressed="true">지금 볼 것</button><button data-m="done" aria-pressed="false">전달함·보관</button>
       </div>
+      <button class="btn" id="btnPolish" title="전달사항·중요 메모를 Claude가 핵심만 남겨 개조식으로 다시 써요">간결하게 다듬기</button>
     </div>
     <section class="msec">
       <h2 class="vh">중요 메모 <span class="when" id="memoCount"></span></h2>

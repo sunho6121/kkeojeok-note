@@ -326,8 +326,12 @@ window.KK = window.KK || {};
   const NOTICE_ST = [['todo', '전달 전'], ['done', '전달함'], ['cancel', '필요 없어짐']];
   const MEMO_ST = [['todo', '중요 메모'], ['done', '보관']];
 
+  // 내용은 줄마다 개조식 한 항목
+  const lines = t => String(t || '').split(/\n/).map(l => l.trim().replace(/^[-○•·]\s*/, '')).filter(Boolean);
   function renderMemo() {
     const S = A().S, today = D.today();
+    const pb = $('btnPolish');
+    if (pb) { pb.disabled = !!S.polishing; pb.textContent = S.polishing ? 'Claude가 다듬는 중…' : '간결하게 다듬기'; }
     const showDone = S.mview === 'done';
     const all = liveItems();
     const memos = all.filter(i => i.type === 'memo');
@@ -345,7 +349,7 @@ window.KK = window.KK || {};
       const src = S.notes.get(it.noteId);
       mbox.append(h('article', { class: 'mcard' + (it.priority === 'high' ? ' hi' : '') + (it.status === 'done' ? ' done' : '') },
         h('div', { class: 'mt' }, it.priority === 'high' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger);margin-right:6px' }, '매우 중요') : null, h('span', null, it.title)),
-        it.detail ? h('div', { class: 'md' }, it.detail) : null,
+        lines(it.detail).length ? h('ul', { class: 'mdl' }, lines(it.detail).map(l => h('li', null, l))) : null,
         h('div', { class: 'it-m' }, h('span', { class: 'when' }, D.short(it.updatedAt || it.createdAt)), src ? h('span', null, '· ' + noteLabel(src)) : null, it.locked ? h('span', null, '· 직접 정함') : null),
         h('div', { class: 'row' },
           h('button', { type: 'button', class: 'btn', onclick: () => A().setItemStatus(it, it.status === 'done' ? 'todo' : 'done') }, it.status === 'done' ? '다시 꺼내기' : '보관'),
@@ -375,7 +379,7 @@ window.KK = window.KK || {};
               h('div', { class: 'it-m' },
                 it.priority === 'high' && st === 'todo' ? h('span', { class: 'pri' }, '중요') : null,
                 it.date ? h('span', { class: late ? 'pri' : '' }, (late ? '기한 지남 · ' : '기한 ') + D.dayLabel(it.date)) : null,
-                it.detail ? h('span', null, it.detail) : null,
+                lines(it.detail).length ? h('span', null, lines(it.detail).join(' · ')) : null,
                 src ? h('span', null, '· ' + noteLabel(src)) : null)),
             h('button', { class: 'st ' + (st === 'done' ? 'done' : st === 'cancel' ? 'cancel' : late ? 'late' : 'todo'), onclick: () => openItem(it) },
               (NOTICE_ST.find(x => x[0] === st) || NOTICE_ST[0])[1]));

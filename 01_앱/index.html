@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-ver="">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
@@ -268,6 +268,33 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 #btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
 #dlgRecStart{width:min(440px,calc(100vw - 32px))}
 #dlgPri{width:min(680px,calc(100vw - 24px))}
+.about{align-items:center}
+.about #appVer{font-family:var(--f-mono);font-size:13px;color:var(--muted);margin-right:auto}
+#dlgDocs{width:min(860px,calc(100vw - 24px))}
+#dlgDocs .dtop{position:sticky;top:-20px;z-index:1;display:grid;gap:10px;background:var(--sheet);margin:-20px -22px 0;padding:16px 22px 10px;border-bottom:1px solid var(--line)}
+.kdoc h2,.kdoc h3,.kdoc h4,.kdoc h5{scroll-margin-top:120px}
+#dTabs{justify-self:start;max-width:100%;overflow-x:auto}
+#dlgDocs .dlg>*{min-width:0}
+.kdoc{font-size:15px;line-height:1.65;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.kdoc h2{font-size:22px;margin:4px 0 10px}
+.kdoc h3{font-size:18px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.kdoc h4{font-size:16px;margin:16px 0 6px}
+.kdoc h5{font-size:15px;margin:12px 0 4px}
+.kdoc p{margin:6px 0;font-size:15px;color:var(--ink)}
+.kdoc ul,.kdoc ol{margin:4px 0;padding-left:22px}
+.kdoc li{margin:2px 0}
+.kdoc li.todo{list-style:none;margin-left:-20px}
+.kdoc li.todo .box{display:inline-grid;place-items:center;width:16px;height:16px;border:1.5px solid var(--muted);border-radius:4px;margin-right:8px;font-size:11px;vertical-align:-2px}
+.kdoc li.todo.ok .box{background:var(--ok);border-color:var(--ok);color:#fff}
+.kdoc code{font-family:var(--f-mono);font-size:.9em;background:var(--accent-soft);border-radius:4px;padding:0 4px}
+.kdoc pre{font-family:var(--f-mono);font-size:13px;line-height:1.5;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre}
+.kdoc hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.kdoc blockquote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0}
+.kdoc a{color:var(--accent)}
+.ktable{overflow-x:auto;margin:8px 0}
+.kdoc table{border-collapse:collapse;font-size:14px;min-width:100%}
+.kdoc th,.kdoc td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.kdoc th{background:var(--accent-soft);font-weight:600;white-space:nowrap}
 .plist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
 .prow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-top:1px solid var(--line)}
 .prow:first-child{border-top:0}
@@ -682,6 +709,16 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   </form>
 </dialog>
 
+<dialog id="dlgDocs" aria-labelledby="dHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="dtop">
+      <div class="mtop"><h2 id="dHead" tabindex="-1" style="outline:none">안내 문서</h2><button type="button" class="btn ghost" id="dClose">닫기</button></div>
+      <div class="seg" id="dTabs" role="group" aria-label="문서 고르기"></div>
+    </div>
+    <div class="kdoc" id="dBody"></div>
+  </form>
+</dialog>
+
 <dialog id="dlgPri" aria-labelledby="pHead">
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2 id="pHead" tabindex="-1" style="outline:none">우선순위 정하기</h2>
@@ -724,6 +761,8 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg" id="settingsForm">
     <h2>설정</h2>
+    <div class="row about"><span id="appVer">끄적노트</span><button type="button" class="btn" id="btnGuide">사용 안내</button><button type="button" class="btn" id="btnWorklog">작업 내역</button></div>
+    <div class="sep"></div>
     <div>
       <h3>Claude 연결 (정리 기능)</h3>
       <p>노트 쓰기·보기·일정은 로그인 없이 됩니다. '정리하기'만 Claude API 키가 필요해요. 키는 이 태블릿에만 저장되고 Anthropic 서버로만 전송됩니다.</p>
@@ -819,6 +858,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="board.js"></script>
 <script src="app.js"></script>
 <script src="daily.js"></script>
+<script src="docs.js"></script>
 <script src="voice.js"></script>
 <script src="hwpx-tpl.js"></script>
 <script src="docgen.js"></script>

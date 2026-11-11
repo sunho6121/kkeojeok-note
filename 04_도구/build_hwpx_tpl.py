@@ -4,7 +4,7 @@
 양식의 글꼴·테두리·칸 설정(header.xml)을 그대로 쓰고, 회의록에 필요한 글자·문단 모양만 덧붙인다.
 양식을 바꾸면 이 스크립트를 다시 돌리고 sw.js의 VERSION을 올린다.
 
-usage: python tools/build_hwpx_tpl.py <회의록 양식.hwpx> hwpx-tpl.js
+usage: python 04_도구/build_hwpx_tpl.py <회의록 양식.hwpx> 01_앱/hwpx-tpl.js
   (HWP 양식은 한글에서 '다른 이름으로 저장 → HWPX'로 먼저 바꾼다)
 """
 import json

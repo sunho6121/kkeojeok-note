@@ -1,7 +1,7 @@
 /* 끄적노트 — 오프라인 캐시 + 공유받기. 앱 파일을 고치면 VERSION 숫자를 올리세요. */
-const VERSION = 'kk-v19';
+const VERSION = 'kk-v20';
 const SHELL = [
-  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'search.js',
+  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'docs.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'search.js',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -57,6 +57,15 @@ self.addEventListener('fetch', e => {
   }
 
   if (url.origin !== self.location.origin) return; // Claude API 등은 그대로 통과
+
+  // 안내 문서(docs/): 새 내용 먼저, 인터넷이 없으면 받아 둔 것
+  if (url.pathname.includes('/docs/')) {
+    e.respondWith(caches.open(VERSION).then(async c => {
+      try { const res = await fetch(req); if (res.ok) c.put(req, res.clone()); return res; }
+      catch (err) { return (await c.match(req)) || new Response('', { status: 503 }); }
+    }));
+    return;
+  }
 
   // 앱 파일: 캐시 먼저 보여주고 뒤에서 새 버전 받아두기
   e.respondWith(caches.open(VERSION).then(async c => {

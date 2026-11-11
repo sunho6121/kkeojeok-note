@@ -268,6 +268,21 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 #btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
 #dlgRecStart{width:min(440px,calc(100vw - 32px))}
 #dlgPri{width:min(680px,calc(100vw - 24px))}
+#dlgEdit,#dlgNote{width:min(560px,calc(100vw - 24px))}
+#eType{justify-self:start}
+.ewhen{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px}
+.ewhen label[hidden]{display:none}
+@media (max-width:520px){.ewhen{grid-template-columns:1fr 1fr}.ewhen label:first-child{grid-column:1/-1}}
+.dlg input[type=date],.dlg input[type=time],#eDetail{min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:0 12px;font-size:15px;width:100%;color:var(--ink)}
+#eDetail{padding:10px 12px;line-height:1.5;resize:vertical;font:inherit;font-size:15px}
+.nli{position:relative}
+.nli .ncard .t{padding-right:40px}
+.nedit{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
+.nedit:hover,.nedit:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.nedit svg{width:20px;height:20px}
+.body-mark{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-size:18px;line-height:34px;padding:6px 24px 96px;white-space:pre-wrap;overflow-wrap:break-word;color:transparent;scrollbar-gutter:stable}
+.body-in{scrollbar-gutter:stable}
+.body-mark del{text-decoration:line-through;text-decoration-color:var(--danger);text-decoration-thickness:2px;background:var(--danger-soft);border-radius:3px}
 .about{align-items:center}
 .about #appVer{font-family:var(--f-mono);font-size:13px;color:var(--muted);margin-right:auto}
 #dlgDocs{width:min(860px,calc(100vw - 24px))}
@@ -515,6 +530,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   <div class="vbar" id="vbar" hidden role="status"><span class="vdot"></span><b id="voiceLabel"></b><span id="voiceLive" class="vlive"></span><button class="btn" id="btnVoiceStop">끝내기</button></div>
   <section class="result" id="result" hidden></section>
   <div class="sheet">
+    <div class="body-mark" id="bodyMark" aria-hidden="true"></div>
     <textarea class="body-in" id="body" spellcheck="false" placeholder="이 노트 하나에 계속 이어서 적으세요. 예)
 내일 10시 팀 회의 3층 회의실
 금요일까지 결과보고서 초안 → 팀장님께
@@ -709,6 +725,47 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   </form>
 </dialog>
 
+<dialog id="dlgEdit" aria-labelledby="eHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="eHead" tabindex="-1" style="outline:none">고치기</h2>
+    <div class="seg" id="eType" role="group" aria-label="종류">
+      <button type="button" data-t="event">약속</button><button type="button" data-t="task">할 일</button><button type="button" data-t="notice">전달</button><button type="button" data-t="memo">메모</button>
+    </div>
+    <label>제목<input type="text" id="eTitle" maxlength="80" autocomplete="off"></label>
+    <label id="eToL">대상<input type="text" id="eTo" maxlength="40" autocomplete="off" placeholder="예: 팀장님, 기획팀"></label>
+    <div class="ewhen" id="eWhen">
+      <label><span id="eDateL">날짜</span><input type="date" id="eDate"></label>
+      <label id="eTimeL">시작<input type="time" id="eTime"></label>
+      <label id="eEndL">끝<input type="time" id="eEnd"></label>
+    </div>
+    <label id="ePlaceL">장소<input type="text" id="ePlace" maxlength="60" autocomplete="off"></label>
+    <label>내용<textarea id="eDetail" rows="3" maxlength="600" placeholder="보충 설명 (없으면 비워 두세요)"></textarea></label>
+    <label class="chkrow" id="eNoteL"><input type="checkbox" id="eNote" checked>노트에도 적기 — 원래 적은 부분에 취소선, 바로 아래에 고친 내용</label>
+    <p>직접 고친 내용은 다시 정리해도 Claude가 바꾸지 않아요.</p>
+    <p class="errmsg" id="eMsg" role="alert"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="eCancel">취소</button>
+      <button type="button" class="btn primary" id="eSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgNote" aria-labelledby="nHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="nHead" tabindex="-1" style="outline:none">노트 고치기</h2>
+    <label>노트 이름<input type="text" id="nTitle" maxlength="60" autocomplete="off" placeholder="비우면 정리할 때 자동으로 붙어요"></label>
+    <p id="nInfo"></p>
+    <div class="row">
+      <button type="button" class="btn" id="nOpen">내용 고치기 (쓰기 화면)</button>
+      <button type="button" class="btn danger" id="nDel">노트 삭제</button>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="nCancel">취소</button>
+      <button type="button" class="btn primary" id="nSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgDocs" aria-labelledby="dHead">
   <form method="dialog" class="dlg" onsubmit="return false">
     <div class="dtop">
@@ -859,6 +916,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="app.js"></script>
 <script src="daily.js"></script>
 <script src="docs.js"></script>
+<script src="edit.js"></script>
 <script src="voice.js"></script>
 <script src="hwpx-tpl.js"></script>
 <script src="docgen.js"></script>

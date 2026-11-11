@@ -24,7 +24,7 @@
   function saveSettings() { lsSet('kk-settings', JSON.stringify(settings)); }
 
   /* ---------- 그리기 묶음 ---------- */
-  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); if (KK.daily) KK.daily.renderBar(); }
+  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); if (KK.daily) KK.daily.renderBar(); if (KK.edit) KK.edit.paint(); }
   function renderAll() {
     $('todayLabel').textContent = D.longToday();
     renderEditorTop(); V.renderNotes(); V.renderSched(); V.renderMemo();
@@ -221,7 +221,7 @@
     mine.forEach((it, idx) => {
       const ref = 'e' + (idx + 1);
       refMap[ref] = it;
-      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, to: it.to || '', status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted });
+      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, to: it.to || '', status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted, edited: !!(it.userFields && Object.keys(it.userFields).length) });
     });
     return { refMap, list };
   }
@@ -310,14 +310,16 @@
     const mine = [...S.items.values()].filter(i => i.noteId === n.id || carried.has(i.id));
     const tomb = new Set(mine.filter(i => i.deleted).map(key));
     const live = new Set(mine.filter(i => !i.deleted).map(key));
-    const changed = [];
+    const changed = [], srcOnly = [];
     let added = 0, updated = 0;
     out.items.forEach(r => {
       const t = r.ref ? refMap[r.ref] : null;
       if (t) {
         if (t.deleted) return;
         const before = JSON.stringify([FIELDS.map(f => t[f]), t.status]);
-        FIELDS.forEach(f => { if (f === 'priority' && t.priSet) return; if (r[f] !== '' && r[f] != null) t[f] = r[f]; }); // 사람이 정한 우선순위는 그대로
+        // 사람이 정한 우선순위·앱에서 직접 고친 칸은 그대로
+        FIELDS.forEach(f => { if (f === 'priority' && t.priSet) return; if (t.userFields && t.userFields[f]) return; if (r[f] !== '' && r[f] != null) t[f] = r[f]; });
+        if (r.src && r.src !== t.src) { t.src = r.src; srcOnly.push(t); } // 노트의 원문 구절(고칠 때 취소선 긋는 곳)
         if (!t.locked && r.status && r.status !== (t.status || 'todo')) {
           t.status = r.status; t.statusAt = now; t.doneAt = r.status === 'done' ? now : 0;
         }
@@ -328,9 +330,10 @@
       if (tomb.has(k) || live.has(k)) return;
       const doc = { id: 't-' + KK.uid(), kind: 'item', noteId: n.id, createdAt: now, updatedAt: now, locked: false, deleted: false, status: r.status || 'todo', doneAt: r.status === 'done' ? now : 0 };
       FIELDS.forEach(f => { doc[f] = r[f] || ''; });
+      doc.src = r.src || '';
       S.items.set(doc.id, doc); changed.push(doc); live.add(k); added++;
     });
-    db.putMany([n, ...changed]);
+    db.putMany([n, ...changed, ...srcOnly.filter(x => !changed.includes(x))]);
     if (KK.board) KK.board.sync(changed);
     return { added, updated };
   }
@@ -891,7 +894,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
+  KK.app = { S, settings, openNote, newNote, deleteNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {

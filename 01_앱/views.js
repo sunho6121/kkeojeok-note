@@ -10,7 +10,7 @@ window.KK = window.KK || {};
   function noteLabel(n) {
     if (!n) return '새 노트';
     if (n.title) return n.title;
-    const first = (n.body || '').split('\n').map(s => s.trim()).find(Boolean);
+    const first = (n.body || '').split('\n').map(s => s.replace(/~~(?:(?!~~)[^\n])+~~/g, '').trim()).find(Boolean); // 지운(~~) 글은 빼고
     return first ? first.slice(0, 30) : (n.hasInk ? '필기 노트' : '빈 노트');
   }
   const notesSorted = () => [...A().S.notes.values()].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -97,7 +97,7 @@ window.KK = window.KK || {};
   function noteCard(n, today) {
     const S = A().S, ul = $('noteList');
     {
-      const lines = (n.body || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const lines = (n.body || '').split('\n').map(s => s.replace(/~~(?:(?!~~)[^\n])+~~/g, '').trim()).filter(Boolean); // 지운(~~) 글은 빼고
       const snippet = (n.summary && n.summary[0]) || lines.slice(n.title ? 0 : 1, 3).join(' · ');
       const its = itemsOf(n.id).filter(isSched);
       const open = its.filter(i => ['todo', 'doing', 'late'].includes(viewStatus(i, today))).length;
@@ -109,10 +109,11 @@ window.KK = window.KK || {};
       if (n.closed) chips.push(h('span', { class: 'chip plain' }, '지난 달'));
       if (n.hasInk) chips.push(h('span', { class: 'chip plain' }, '필기'));
       (n.tags || []).slice(0, 2).forEach(t => chips.push(h('span', { class: 'chip plain' }, '#' + t)));
-      ul.append(h('li', null, h('button', {
+      ul.append(h('li', { class: 'nli' }, h('button', {
         class: 'ncard', 'aria-current': String(n.id === S.cur),
         onclick: () => { A().openNote(n.id); A().setView('write'); },
-      }, h('div', { class: 't' }, noteLabel(n)), snippet ? h('div', { class: 's' }, snippet) : null, h('div', { class: 'm' }, chips))));
+      }, h('div', { class: 't' }, noteLabel(n)), snippet ? h('div', { class: 's' }, snippet) : null, h('div', { class: 'm' }, chips)),
+      KK.edit ? KK.edit.noteBtn(n) : null));
     }
   }
 
@@ -397,6 +398,7 @@ window.KK = window.KK || {};
       paint();
     }
     const acts = $('itActions'); acts.textContent = '';
+    if (it && KK.edit) acts.append(KK.edit.itemBtn(it)); // 내용 고치기
     if (r.link) acts.append(h('a', { class: 'btn', href: r.link, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '캘린더에서 보기'));
     else if (it && isSched(it)) { const url = gcalUrl(it); if (url) acts.append(h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '구글 캘린더에 추가')); }
     if (r.kind === 'g') acts.append(h('button', { type: 'button', class: 'btn', onclick: () => { $('dlgItem').close(); A().adoptEvent(r.ev); } }, svg(ICON.plus), '끄적노트에서 상태 관리'));

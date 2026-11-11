@@ -22,7 +22,7 @@ window.KK = window.KK || {};
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail'],
+          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail', 'src'],
           properties: {
             ref: { type: 'string' },
             type: { type: 'string', enum: ['event', 'task', 'notice', 'memo'] },
@@ -35,6 +35,7 @@ window.KK = window.KK || {};
             place: { type: 'string' },
             priority: { type: 'string', enum: ['high', 'normal', 'low'] },
             detail: { type: 'string' },
+            src: { type: 'string' },
           },
         },
       },
@@ -53,7 +54,7 @@ window.KK = window.KK || {};
       (e.date || '날짜 없음') + (e.time ? ' ' + e.time : ''),
       e.place || '-',
       e.deleted ? '삭제됨 — 사용자가 지움, 다시 만들지 말 것'
-        : '상태: ' + STATUS_KO[e.status || 'todo'] + (e.locked ? ' (사용자가 직접 정함 — 바꾸지 말 것)' : ''),
+        : '상태: ' + STATUS_KO[e.status || 'todo'] + (e.locked ? ' (사용자가 직접 정함 — 바꾸지 말 것)' : '') + (e.edited ? ' · 사용자가 앱에서 고침(제목·날짜 등 그대로 둘 것)' : ''),
     ].join(' | ')).join('\n');
   }
 
@@ -92,6 +93,7 @@ window.KK = window.KK || {};
       '- title은 메모 전체를 대표하는 20자 이내 제목.',
       '- summary는 핵심 1~5개, 각 40자 이내, 개조식(~함, ~임 또는 명사형).',
       '- tags는 주제어 0~3개, 각 6자 이내, # 없이.',
+      '- src에는 그 항목의 근거가 된 메모 원문 구절을 한 글자도 고치지 말고 그대로 복사해(한 줄 안, 60자 이내). 필기·첨부에서 왔거나 찾기 어려우면 "".',
       '- items의 title은 "누가/무엇을" 알 수 있게 짧게. detail에는 메모에 적힌 보충 설명이나 진행 상황만. notice가 아니면 to는 "".',
       '- notice와 memo는 개조식으로 간결·명료하게: title은 핵심 한 줄 25자 이내, 명사형으로 끝냄(~제출, ~확정, ~필요, ~안내). detail은 꼭 필요한 보충만 줄바꿈(\\n)으로 나눈 1~3줄, 각 40자 이내, ~함·~임·명사형으로 끝냄. 날짜·숫자는 남기고 인사·반복·군더더기는 빼. date·to에 넣은 기한·대상은 detail에 다시 쓰지 마.',
       '',
@@ -104,6 +106,9 @@ window.KK = window.KK || {};
       '- 상태 변화가 메모에 분명히 적혀 있을 때만 바꾸고, 아니면 기존 상태를 그대로 둬. 새 일정은 보통 todo.',
       '- "사용자가 직접 정함" 표시된 일정의 status는 바꾸지 말고 기존 값을 그대로 써.',
       '- "삭제됨" 표시된 일정은 다시 만들지 말고 돌려주지도 마.',
+      '- 메모에서 ~~ ~~로 감싼 글은 사용자가 지운 내용이야. 무시해.',
+      '- "↳ 고침(날짜): …" 줄은 사용자가 앱에서 기존 항목을 고친 기록이야. 새 항목으로 만들지 말고 같은 기존 항목(ref)의 최신 내용으로 봐.',
+      '- "사용자가 앱에서 고침" 표시된 기존 항목은 같은 일이면 ref를 넣되, 제목·날짜·시간·장소·대상·내용은 기존 값을 그대로 써.',
       '- 메모의 "[이어서 할 일 · …]" 줄 아래 "- "로 시작하는 줄들은 앱이 전날까지 못 끝낸 기존 항목을 불러와 적은 목록이야. 이 줄들로 새 항목을 만들지 마. 그 줄이나 아래쪽에 끝냄·완료·취소·진행·기한 변경 등이 적혀 있을 때만 해당 기존 항목(ref)을 고쳐서 돌려줘. 줄 앞의 [높음]·[보통]·[낮음]은 사용자가 정한 우선순위야.',
       '',
       '이 노트에서 전에 정리한 항목 (번호 | 종류 | 제목 | 날짜 | 장소 | 상태):',
@@ -366,6 +371,7 @@ window.KK = window.KK || {};
           place: str(it && it.place).slice(0, 60),
           priority: it && it.priority === 'high' ? 'high' : 'normal',
           detail: str(it && it.detail).slice(0, 200),
+          src: str(it && it.src).slice(0, 120), // 노트 원문 구절(고칠 때 취소선 긋는 곳)
         })).filter(it => it.title),
       };
     },

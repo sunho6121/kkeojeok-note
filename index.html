@@ -267,6 +267,24 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 #btnRecord.rec-on .recdot{display:inline-block}
 #btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
 #dlgRecStart{width:min(440px,calc(100vw - 32px))}
+#dlgPri{width:min(680px,calc(100vw - 24px))}
+.plist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
+.prow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-top:1px solid var(--line)}
+.prow:first-child{border-top:0}
+.prow.need{box-shadow:inset 3px 0 0 var(--accent)}
+.pmain{flex:1 1 220px;min-width:0;display:grid;gap:2px}
+.pt{font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.pm{font-size:12.5px;color:var(--muted)}
+.pm b{color:var(--accent);font-weight:600}
+.prow.done .pt{text-decoration:line-through;color:var(--muted)}
+.pctl{display:flex;align-items:center;gap:8px;margin-left:auto}
+.pseg button{min-height:40px;padding:0 13px}
+.pseg button.p-high[aria-pressed="true"]{background:var(--danger-soft);color:var(--danger)}
+.pseg button.p-low[aria-pressed="true"]{background:var(--paper);color:var(--ink)}
+.pseg button:disabled{opacity:.4;cursor:default}
+.pdone{min-height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--muted);background:var(--sheet)}
+.pdone[aria-pressed="true"]{background:var(--ok-soft);color:var(--ok);border-color:var(--ok);font-weight:600}
+.wtag em.hi{color:var(--danger);border-color:var(--danger)}
 @media (max-width:980px){.edbar .lbl{display:none}}
 .reclist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .reclist li{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px}
@@ -466,13 +484,15 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="rbar" id="rbar"></div>
   </div>
   <div class="carry" id="carry" hidden role="status"></div>
+  <div class="carry" id="daybar" hidden role="status"></div>
   <div class="vbar" id="vbar" hidden role="status"><span class="vdot"></span><b id="voiceLabel"></b><span id="voiceLive" class="vlive"></span><button class="btn" id="btnVoiceStop">끝내기</button></div>
   <section class="result" id="result" hidden></section>
   <div class="sheet">
     <textarea class="body-in" id="body" spellcheck="false" placeholder="이 노트 하나에 계속 이어서 적으세요. 예)
 내일 10시 팀 회의 3층 회의실
 금요일까지 결과보고서 초안 → 팀장님께
-(다음날) 보고서 반쯤 함 / 회의는 다음주로 연기
+11/12(목)   ← 날짜만 한 줄 적으면 전날까지 못 끝낸 일을 불러와요
+보고서 반쯤 함 / 회의는 다음주로 연기
 //   ← 마지막 줄에 // 를 쓰면 일정과 상태가 정리돼요"></textarea>
     <div class="penwrap" id="penWrap" hidden>
       <canvas id="ink" aria-label="필기 영역"></canvas>
@@ -579,6 +599,10 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <div class="stgrid" id="itStatus"></div>
       <p style="margin-top:8px">직접 바꾼 상태는 다시 정리해도 Claude가 바꾸지 않아요.</p>
     </div>
+    <div id="itPriBox" hidden>
+      <h3>우선순위</h3>
+      <div class="seg pseg" id="itPri" role="group" aria-label="우선순위"></div>
+    </div>
     <div class="row" id="itActions"></div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary" value="close">닫기</button></div>
   </form>
@@ -655,6 +679,18 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <div class="row" style="justify-content:space-between"><b style="font-size:14px">올릴 할 일</b><button type="button" class="linkbtn" id="bAll">모두 선택·해제</button></div>
     <div id="bList"></div>
     <div class="mrun"><button type="button" class="btn primary" id="bGo">보드에 올리기</button><span class="mmsg" id="bMsg"></span></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPri" aria-labelledby="pHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="pHead" tabindex="-1" style="outline:none">우선순위 정하기</h2>
+    <p id="pText"></p>
+    <ul class="plist" id="pList"></ul>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="pLater">나중에</button>
+      <button type="button" class="btn primary" id="pSave">저장</button>
+    </div>
   </form>
 </dialog>
 
@@ -782,6 +818,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="work.js"></script>
 <script src="board.js"></script>
 <script src="app.js"></script>
+<script src="daily.js"></script>
 <script src="voice.js"></script>
 <script src="hwpx-tpl.js"></script>
 <script src="docgen.js"></script>

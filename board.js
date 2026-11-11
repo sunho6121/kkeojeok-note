@@ -114,7 +114,7 @@ window.KK = window.KK || {};
     if (t.task) it.title = String(t.task).slice(0, 120);
     it.date = D.isValid(t.due || '') ? t.due : '';
     if (st !== (it.status || 'todo')) { it.status = st; it.statusAt = now; it.doneAt = st === 'done' ? now : 0; }
-    if (t.priority) it.priority = t.priority === '높음' ? 'high' : 'normal';
+    if (t.priority && !it.priSet) it.priority = t.priority === '높음' ? 'high' : 'normal'; // 끄적노트에서 정한 우선순위는 그대로
     it.updatedAt = now;
   }
   async function pull(force) {

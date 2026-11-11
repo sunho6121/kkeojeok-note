@@ -383,6 +383,19 @@ window.KK = window.KK || {};
       type: 'button', class: 'st-' + k, 'aria-pressed': String((it.status || 'todo') === k),
       onclick: () => { A().setItemStatus(it, k); $('dlgItem').close(); },
     }, label)));
+    // 우선순위 (할 일·전달사항)
+    const pb = $('itPri'); pb.textContent = '';
+    $('itPriBox').hidden = !(it && (it.type === 'task' || it.type === 'notice'));
+    if (!$('itPriBox').hidden) {
+      const paint = () => {
+        pb.textContent = '';
+        [['high', '높음'], ['normal', '보통'], ['low', '낮음']].forEach(([k, label]) => pb.append(h('button', {
+          type: 'button', class: 'p-' + k, 'aria-pressed': String((it.priority || 'normal') === k),
+          onclick: () => { A().setItemPriority(it, k); paint(); },
+        }, label)));
+      };
+      paint();
+    }
     const acts = $('itActions'); acts.textContent = '';
     if (r.link) acts.append(h('a', { class: 'btn', href: r.link, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '캘린더에서 보기'));
     else if (it && isSched(it)) { const url = gcalUrl(it); if (url) acts.append(h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '구글 캘린더에 추가')); }

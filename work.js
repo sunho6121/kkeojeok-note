@@ -180,6 +180,8 @@ window.KK = window.KK || {};
       h('button', { class: 'wmain', onclick: () => V().openItem(it) },
         h('span', { class: 'wt' }, it.title),
         h('span', { class: 'wtag' },
+          it.priority === 'high' && st !== 'done' ? h('em', { class: 'hi' }, '높음') : null,
+          it.priority === 'low' && st !== 'done' ? h('em', null, '낮음') : null,
           it.type === 'notice' ? h('em', null, '전달') : null,
           it.source === 'minutes' ? h('em', null, '회의') : null,
           it.board && !it.board.gone ? h('em', { class: 'go' }, '보드') : null,
@@ -221,7 +223,8 @@ window.KK = window.KK || {};
     // 왼쪽: 할 일 (이번 달) / 넘긴 일 (지난 달)
     const left = h('section', { class: 'wcol' });
     if (isCur) {
-      const open = work.filter(i => OPEN.includes(i.status || 'todo')).sort(byDate);
+      const rk = i => (KK.daily ? KK.daily.rank(i) : 1);
+      const open = work.filter(i => OPEN.includes(i.status || 'todo')).sort((a, b) => rk(a) - rk(b) || byDate(a, b)); // 같은 묶음 안에서는 우선순위 높은 것부터
       const wk = D.ymd(D.addDays(new Date(), 6));
       const late = open.filter(i => viewStatus(i, today) === 'late');
       const active = open.filter(i => i.status !== 'hold' && !late.includes(i));

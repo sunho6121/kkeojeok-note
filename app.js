@@ -24,7 +24,7 @@
   function saveSettings() { lsSet('kk-settings', JSON.stringify(settings)); }
 
   /* ---------- 그리기 묶음 ---------- */
-  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); }
+  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); if (KK.daily) KK.daily.renderBar(); }
   function renderAll() {
     $('todayLabel').textContent = D.longToday();
     renderEditorTop(); V.renderNotes(); V.renderSched(); V.renderMemo();
@@ -127,7 +127,15 @@
     const n = ensureNote();
     n.body = bodyEl.value; n.updatedAt = Date.now();
     scheduleSave(); checkTrigger();
+    if (KK.daily) KK.daily.onInput(); // 날짜만 적은 줄 → 전날까지 못 끝낸 일 불러오기
     clearTimeout(topTimer); topTimer = setTimeout(renderEditorTop, 500);
+  }
+  // 코드로 본문을 고친 뒤 저장 (날짜 불러오기 등)
+  function bodyEdited() {
+    const n = ensureNote();
+    n.body = bodyEl.value; n.updatedAt = Date.now();
+    scheduleSave();
+    clearTimeout(topTimer); topTimer = setTimeout(renderEditorTop, 300);
   }
   function lastLine(v) { const lines = v.replace(/\s+$/, '').split('\n'); return (lines[lines.length - 1] || '').trim(); }
   function checkTrigger() {
@@ -204,9 +212,9 @@
 
   /* 이 노트의 기존 일정을 짧은 번호(e1…)로 Claude에게 넘긴다 */
   function existingFor(n) {
-    const cutoff = Date.now() - 60 * 86400000;
+    const cutoff = Date.now() - 60 * 86400000, carried = KK.daily ? KK.daily.refs(n) : new Set();
     const mine = [...S.items.values()]
-      .filter(i => i.noteId === n.id && (!i.deleted || (i.deletedAt || 0) > cutoff))
+      .filter(i => (i.noteId === n.id || carried.has(i.id)) && (!i.deleted || (i.deletedAt || 0) > cutoff))
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(-150);
     const refMap = {}, list = [];
@@ -298,7 +306,8 @@
     n.updatedAt = now; n.organizedAt = now; n.pending = false; n.model = settings.model;
 
     const key = i => (i.title + '|' + (i.date || '')).replace(/\s/g, '');
-    const mine = [...S.items.values()].filter(i => i.noteId === n.id);
+    const carried = KK.daily ? KK.daily.refs(n) : new Set();
+    const mine = [...S.items.values()].filter(i => i.noteId === n.id || carried.has(i.id));
     const tomb = new Set(mine.filter(i => i.deleted).map(key));
     const live = new Set(mine.filter(i => !i.deleted).map(key));
     const changed = [];
@@ -308,7 +317,7 @@
       if (t) {
         if (t.deleted) return;
         const before = JSON.stringify([FIELDS.map(f => t[f]), t.status]);
-        FIELDS.forEach(f => { if (r[f] !== '' && r[f] != null) t[f] = r[f]; });
+        FIELDS.forEach(f => { if (f === 'priority' && t.priSet) return; if (r[f] !== '' && r[f] != null) t[f] = r[f]; }); // 사람이 정한 우선순위는 그대로
         if (!t.locked && r.status && r.status !== (t.status || 'todo')) {
           t.status = r.status; t.statusAt = now; t.doneAt = r.status === 'done' ? now : 0;
         }
@@ -356,6 +365,10 @@
     db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render();
     if (KK.gcal) KK.gcal.syncSoon();
     if (KK.board) KK.board.sync([it]);
+  }
+  function setItemPriority(it, p) {
+    it.priority = p; it.priSet = true; it.updatedAt = Date.now();
+    db.put(it); V.renderSched(); V.renderResult(); V.renderMemo(); if (KK.work) KK.work.render(); if (KK.daily) KK.daily.renderBar();
   }
   function deleteItem(it) {
     it.deleted = true; it.deletedAt = Date.now();
@@ -878,7 +891,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
+  KK.app = { S, settings, openNote, newNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {

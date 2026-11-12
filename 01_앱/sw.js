@@ -1,7 +1,7 @@
 /* 끄적노트 — 오프라인 캐시 + 공유받기. 앱 파일을 고치면 VERSION 숫자를 올리세요. */
-const VERSION = 'kk-v21';
+const VERSION = 'kk-v22';
 const SHELL = [
-  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'docs.js', 'edit.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'search.js',
+  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'docs.js', 'edit.js', 'attach.js', 'ask.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'search.js',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

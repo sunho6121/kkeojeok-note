@@ -266,9 +266,42 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .recdot{display:none;width:8px;height:8px;border-radius:50%;background:var(--danger);flex:none;animation:blink 1.2s ease-in-out infinite}
 #btnRecord.rec-on .recdot{display:inline-block}
 #btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
-#dlgRecStart{width:min(440px,calc(100vw - 32px))}
+#dlgRecStart,#dlgRecMark{width:min(520px,calc(100vw - 32px))}
+.rqtext{display:grid;gap:8px;font-size:14.5px;color:var(--ink);margin:0}
+.rqtext p{margin:0;color:var(--ink)}
+.rqtext ol,ol.rqtext{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14.5px}
+.recpill{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-family:var(--f-mono);font-size:13px;font-weight:600;white-space:nowrap}
+.recpill .recdot{display:inline-block}
+body[data-view="write"] .recpill{display:none}
 #dlgPri{width:min(680px,calc(100vw - 24px))}
 #dlgEdit,#dlgNote{width:min(560px,calc(100vw - 24px))}
+.acnt:not(:empty){font-family:var(--f-mono);font-size:12px;min-width:20px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+#dlgAtt{width:min(680px,calc(100vw - 24px))}
+.alist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
+.alist .wempty{padding:14px}
+.arow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
+.arow:first-child{border-top:0}
+.akind{flex:none;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 7px}
+.amain{flex:1;min-width:0;display:grid;gap:2px}
+.amain .at{font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amain .am{font-size:12.5px;color:var(--muted)}
+@media (max-width:560px){.arow{flex-wrap:wrap}.amain{flex:1 1 calc(100% - 70px)}.arow .btn{min-height:36px}}
+#dlgAsk{width:min(880px,calc(100vw - 24px));height:min(92dvh,920px)}
+#dlgAsk .askdlg{height:100%;max-height:none;grid-template-rows:auto auto minmax(0,1fr) auto auto;overflow:hidden;box-sizing:border-box}
+#dlgAsk .mtop h2{flex:1}
+.qopts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.qlog{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:10px;padding:4px 2px}
+.qhint,.qinfo{margin:0;font-size:13.5px;color:var(--muted)}
+.qq{align-self:flex-end;max-width:85%;background:var(--accent-soft);color:var(--ink);border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.qa{align-self:stretch;background:var(--sheet);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 14px}
+.qa.qerr{color:var(--danger);border-color:var(--danger)}
+.qa .spin{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
+.qmeta{display:flex;gap:4px 10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:-4px}
+.qmeta .linkbtn{margin-left:0;min-height:30px;font-size:13px}
+.qin{display:flex;gap:8px;align-items:flex-end}
+.qin textarea{flex:1;min-height:52px;max-height:160px;resize:vertical;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:10px 12px;font:inherit;font-size:15px;color:var(--ink)}
+.qin .btn{min-height:52px;min-width:76px}
+.qnote{font-size:12.5px !important}
 #eType{justify-self:start}
 .ewhen{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px}
 .ewhen label[hidden]{display:none}
@@ -501,7 +534,9 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <button data-v="rec">녹음 <span class="cnt" id="recTabCnt"></span></button>
   </nav>
   <div class="right">
+    <button class="recpill" id="recPill" hidden type="button"><span class="recdot" aria-hidden="true"></span><span id="recPillT"></span></button>
     <div class="sync" id="sync" data-s="ok">기기에 저장됨</div>
+    <button class="gear" id="btnAsk" aria-label="Claude에게 묻기" title="Claude에게 묻기 (노트·일정·붙인 자료를 읽고 답해요)"></button>
     <button class="gear" id="btnSearch" aria-label="메모 검색"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
     <button class="gear" id="btnSettings" aria-label="설정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
   </div>
@@ -511,6 +546,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   <div class="edbar">
     <div class="nchips" id="noteChips"></div>
     <button class="btn" id="btnPaste" title="복사해 둔 글이나 이미지를 노트에 붙여넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg><span class="lbl">붙여넣기</span></button>
+    <button class="btn" id="btnAtt" title="이 노트에 관련 자료 붙이기 (노트에는 안 보이고, 질문할 때 Claude가 읽어요)"><span class="lbl">자료</span><span class="acnt" id="attCnt"></span></button>
     <div class="seg" role="group" aria-label="음성">
       <button id="btnDictate" aria-pressed="false" title="말하면 노트에 글자로 적혀요 (무료)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span class="lbl">받아쓰기</span></button>
       <button id="btnRecord" aria-pressed="false" title="소리를 녹음해 이 노트에 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span class="recdot" aria-hidden="true"></span><span class="lbl" id="recLbl">녹음</span></button>
@@ -586,7 +622,6 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
       <input class="search" id="search" type="search" placeholder="노트 검색 (제목·내용·태그)" autocomplete="off">
       <button class="btn" id="btnImportNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>삼성 노트 가져오기</button>
       <button class="btn" id="btnNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>새 노트</button>
-      <input type="file" id="recAppIn" accept="audio/*" capture hidden>
       <input type="file" id="importNoteFile" multiple accept=".txt,.pdf,.jpg,.jpeg,.png,.webp,text/plain,application/pdf,image/*,audio/*,.m4a,.mp3,.wav" hidden>
     </div>
     <div class="import-help" id="importHelp">
@@ -725,6 +760,28 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
   </form>
 </dialog>
 
+<dialog id="dlgAtt" aria-labelledby="aHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="aHead" tabindex="-1" style="outline:none">관련 자료</h2><button type="button" class="btn ghost" id="aClose">닫기</button></div>
+    <p>이 노트에 붙인 자료예요. 노트 화면에는 보이지 않고, <b>질문할 때 Claude가 함께 읽어요</b>. PDF·사진·한글(.hwpx)·워드·파워포인트·엑셀·글 파일을 읽을 수 있어요. 한글 .hwp는 .hwpx나 PDF로 저장해 붙여 주세요.</p>
+    <div class="row"><button type="button" class="btn primary" id="aAdd">자료 붙이기</button><input type="file" id="aFile" multiple hidden></div>
+    <ul class="alist" id="aList"></ul>
+  </form>
+</dialog>
+
+<dialog id="dlgAsk" aria-labelledby="qHead">
+  <form method="dialog" class="dlg askdlg" onsubmit="return false">
+    <div class="mtop"><h2 id="qHead">Claude에게 묻기</h2><button type="button" class="btn ghost" id="qNew">새 질문</button><button type="button" class="btn ghost" id="qClose">닫기</button></div>
+    <div class="qopts">
+      <div class="seg" id="qScope" role="group" aria-label="무엇을 읽고 답할지"><button type="button" data-s="note">지금 노트</button><button type="button" data-s="month">이번 달</button><button type="button" data-s="all">전체</button></div>
+      <label class="chkrow"><input type="checkbox" id="qAtt" checked>붙인 자료도 읽기</label>
+    </div>
+    <div class="qlog" id="qLog" aria-live="polite"></div>
+    <div class="qin"><textarea id="qText" rows="2" placeholder="물어볼 내용 (Ctrl+Enter로 보내기)"></textarea><button type="button" class="btn primary" id="qGo">묻기</button></div>
+    <p class="qnote">노트·일정·붙인 자료가 Anthropic으로 전송돼요. 환자 개인정보는 넣지 마세요. 질문마다 API 요금이 들어요(같은 자료로 이어 물으면 덜 들어요).</p>
+  </form>
+</dialog>
+
 <dialog id="dlgEdit" aria-labelledby="eHead">
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2 id="eHead" tabindex="-1" style="outline:none">고치기</h2>
@@ -791,10 +848,26 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <dialog id="dlgRecStart" aria-labelledby="rqHead">
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2 id="rqHead">녹음을 시작할까요?</h2>
-    <p id="rqText"></p>
+    <div id="rqText" class="rqtext"></div>
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn ghost" id="rqCancel">취소</button>
       <button type="button" class="btn primary" id="rqGo">녹음 시작</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecMark" aria-labelledby="rmHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="rmHead">음성 녹음 앱에서 녹음 중</h2>
+    <p id="rmText"></p>
+    <ol class="rqtext">
+      <li>음성 녹음 앱에서 녹음을 멈춰요 (필요하면 텍스트 변환)</li>
+      <li>녹음 목록에서 그 녹음을 <b>공유 → 끄적노트</b>로 보내요 — 녹음 파일과 변환 글을 함께 보내면 회의록이 자동으로 만들어져요</li>
+      <li>녹음을 시작한 노트에 붙어요. 이 표시는 그때 저절로 꺼져요</li>
+    </ol>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="rmClose">닫기</button>
+      <button type="button" class="btn" id="rmEnd">녹음 끝 표시</button>
     </div>
   </form>
 </dialog>
@@ -872,8 +945,8 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
     <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치는 업무 할 일로, 결정사항은 중요 메모로 넣기</label>
     <label>녹음 버튼을 누르면
       <select id="setRecWith">
-        <option value="app">음성 녹음 앱이 열려서 녹음 (추천 · 텍스트 변환 가능)</option>
-        <option value="web">끄적노트 안에서 녹음 (짧은 메모용)</option>
+        <option value="app">음성 녹음 앱으로 녹음 (추천 · 녹음은 그 앱에 저장, 그동안 끄적노트 사용)</option>
+        <option value="web">끄적노트 안에서 녹음 (짧은 메모용 · 음성 녹음 앱에는 저장 안 됨)</option>
       </select>
     </label>
     <div class="sep"></div>
@@ -917,6 +990,8 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 <script src="daily.js"></script>
 <script src="docs.js"></script>
 <script src="edit.js"></script>
+<script src="attach.js"></script>
+<script src="ask.js"></script>
 <script src="voice.js"></script>
 <script src="hwpx-tpl.js"></script>
 <script src="docgen.js"></script>

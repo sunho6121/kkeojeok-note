@@ -24,7 +24,7 @@
   function saveSettings() { lsSet('kk-settings', JSON.stringify(settings)); }
 
   /* ---------- 그리기 묶음 ---------- */
-  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); if (KK.daily) KK.daily.renderBar(); if (KK.edit) KK.edit.paint(); }
+  function renderEditorTop() { V.renderChips(); V.renderResult(); if (KK.work) KK.work.renderCarry(); if (KK.daily) KK.daily.renderBar(); if (KK.edit) KK.edit.paint(); if (KK.attach) KK.attach.refresh(); }
   function renderAll() {
     $('todayLabel').textContent = D.longToday();
     renderEditorTop(); V.renderNotes(); V.renderSched(); V.renderMemo();
@@ -108,7 +108,7 @@
     // 가져온 파일·녹음은 되돌리기 시간(6초)이 지난 뒤 지운다
     setTimeout(async () => {
       if (S.notes.has(n.id)) return;
-      const extra = (await db.all()).filter(d => (d.kind === 'rec' && d.noteId === n.id) || d.id === 'imp-' + n.id).map(d => d.id);
+      const extra = (await db.all()).filter(d => (['rec', 'att'].includes(d.kind) && d.noteId === n.id) || d.id === 'imp-' + n.id).map(d => d.id);
       db.delMany(extra);
     }, 8000);
     S.cur = null;
@@ -478,7 +478,7 @@
   }
   async function exportBackup() {
     flushSave();
-    const docs = (await db.all()).filter(d => d.kind !== 'rec'); // 녹음 파일은 백업에서 뺀다(용량)
+    const docs = (await db.all()).filter(d => !['rec', 'att'].includes(d.kind)); // 녹음·붙인 자료 파일은 백업에서 뺀다(용량)
     saveFile('끄적노트-백업-' + D.today() + '.json', JSON.stringify({ app: 'kkeojeok', version: 3, exportedAt: new Date().toISOString(), docs }, null, 1), 'application/json');
   }
   async function importBackup(file) {
@@ -715,7 +715,8 @@
         const audio = await recentRec(d => d.blob && !(d.text || '').trim() && !d.minutes, tr ? 3 * 3600e3 : 30 * 60e3);
         if (audio || tr) {
           const now = Date.now();
-          const r = audio || { id: 'rec-' + KK.uid(), kind: 'rec', noteId: ensureNote().id, createdAt: now, startAt: guessStart(title, 0), duration: 0, mime: '', size: 0,
+          const rt = KK.voice && KK.voice.recTarget();
+          const r = audio || { id: 'rec-' + KK.uid(), kind: 'rec', noteId: rt ? rt.note.id : ensureNote().id, createdAt: now, startAt: guessStart(title, 0) || (rt && rt.at) || 0, duration: 0, mime: '', size: 0,
             name: ((shared && shared.title) || (txts[0] && txts[0].name.replace(/\.[^.]+$/, '')) || '녹취 글 ' + D.stamp(now)).slice(0, 60), draft: false, blob: null, src: 'share-text' };
           r.text = '[녹취록]\n' + text;
           await db.putRaw(r); recs++; linked = true; toMinutes.push(r);
@@ -743,7 +744,8 @@
         if (type.startsWith('audio/') || AUDIO_EXT.includes(ext)) {
           // 음성 녹음 앱 등에서 보낸 녹음 파일 → 지금 노트에 붙은 녹음으로 보관
           if (db.usingFallback) { skipped.push(f.name); continue; }
-          const target = ensureNote();
+          const rt = KK.voice && KK.voice.recTarget();
+          const target = rt ? rt.note : ensureNote(); // 녹음 시작을 표시한 노트(음성 녹음 앱으로 녹음한 경우)
           const dur = await audioDuration(f);
           // 변환 글을 먼저 따로 받아 둔 게 있으면(3시간 안) 그 녹취 글에 이 녹음 파일을 붙인다
           const waiting = !pairText && await recentRec(d => !d.blob && (d.text || '').trim(), 3 * 3600e3);
@@ -773,7 +775,7 @@
       } catch (e) { skipped.push(f.name); }
     }
     const tail = settings.apiKey ? (navigator.onLine ? ' · 정리를 시작해요' : ' · 인터넷이 연결되면 정리해요') : ' · API 키를 넣으면 정리돼요';
-    if (recs && KK.voice) KK.voice.refresh();
+    if (recs && KK.voice) { KK.voice.endMark(true); KK.voice.refresh(); } // 음성 녹음 앱 녹음 중 표시를 끝냄
     if (made.length) {
       S.cur = null; openNote(made[made.length - 1].id); renderAll(); setView('write');
       toast(made.length + '개 노트를 가져왔어요' + tail + (recs ? ' · 녹음 ' + recs + '개 보관' : '') + (skipped.length ? ' (못 읽은 파일 ' + skipped.length + '개)' : ''), null, null, 6000);
@@ -894,7 +896,7 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, deleteNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings };
+  KK.app = { S, settings, openNote, newNote, deleteNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings, openSettings };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {

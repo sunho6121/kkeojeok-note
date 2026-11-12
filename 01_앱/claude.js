@@ -107,6 +107,7 @@ window.KK = window.KK || {};
       '- "사용자가 직접 정함" 표시된 일정의 status는 바꾸지 말고 기존 값을 그대로 써.',
       '- "삭제됨" 표시된 일정은 다시 만들지 말고 돌려주지도 마.',
       '- 메모에서 ~~ ~~로 감싼 글은 사용자가 지운 내용이야. 무시해.',
+      '- "[질문 · …]"부터 "[질문 끝]"까지는 앱의 질문·답 기록이야. 여기서 새 항목을 만들지 마.',
       '- "↳ 고침(날짜): …" 줄은 사용자가 앱에서 기존 항목을 고친 기록이야. 새 항목으로 만들지 말고 같은 기존 항목(ref)의 최신 내용으로 봐.',
       '- "사용자가 앱에서 고침" 표시된 기존 항목은 같은 일이면 ref를 넣되, 제목·날짜·시간·장소·대상·내용은 기존 값을 그대로 써.',
       '- 메모의 "[이어서 할 일 · …]" 줄 아래 "- "로 시작하는 줄들은 앱이 전날까지 못 끝낸 기존 항목을 불러와 적은 목록이야. 이 줄들로 새 항목을 만들지 마. 그 줄이나 아래쪽에 끝냄·완료·취소·진행·기한 변경 등이 적혀 있을 때만 해당 기존 항목(ref)을 고쳐서 돌려줘. 줄 앞의 [높음]·[보통]·[낮음]은 사용자가 정한 우선순위야.',
@@ -278,7 +279,68 @@ window.KK = window.KK || {};
     ].join('\n');
   }
 
+  /* ---------- 질문 답 받기 (흘려받기: 글자가 오는 대로 onText) ---------- */
+  async function stream({ apiKey, model, effort, system, messages, signal, onText, maxTokens }) {
+    const headers = {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': API_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true',
+    };
+    const body = {
+      model, max_tokens: maxTokens || 16000, stream: true, system, messages,
+      output_config: { effort: ['low', 'medium', 'high'].includes(effort) ? effort : 'high' },
+    };
+    let res;
+    try { res = await fetch(URL_MESSAGES, { method: 'POST', headers, body: JSON.stringify(body), signal }); }
+    catch (e) {
+      if (e && e.name === 'AbortError') throw fail('cancelled');
+      throw fail('offline', '인터넷에 연결할 수 없어요');
+    }
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* 무시 */ }
+      const msg = (data && data.error && data.error.message) || ('HTTP ' + res.status);
+      if (res.status === 401) throw fail('bad_key', msg);
+      if (res.status === 403) throw fail('forbidden', msg);
+      if (res.status === 404) throw fail('bad_model', msg);
+      if (res.status === 413) throw fail('too_large', msg);
+      if (res.status === 429) throw fail('rate', msg);
+      if (res.status >= 500) throw fail('server', msg);
+      throw fail('bad_request', msg);
+    }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '', text = '', stop = '';
+    const usage = {};
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const raw = buf.slice(0, i); buf = buf.slice(i + 2);
+          const data = raw.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+          if (!data) continue;
+          let ev;
+          try { ev = JSON.parse(data); } catch (e) { continue; }
+          if (ev.type === 'message_start' && ev.message && ev.message.usage) Object.assign(usage, ev.message.usage);
+          else if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { text += ev.delta.text; if (onText) onText(text); }
+          else if (ev.type === 'message_delta') { if (ev.usage) Object.assign(usage, ev.usage); if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; }
+          else if (ev.type === 'error') throw fail(ev.error && ev.error.type === 'overloaded_error' ? 'server' : 'bad_request', (ev.error && ev.error.message) || '오류');
+        }
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw fail('cancelled');
+      if (e && e.code) throw e;
+      throw fail('offline', '답을 받는 중에 연결이 끊겼어요');
+    }
+    if (stop === 'refusal') throw fail('refused');
+    return { text, usage, stop };
+  }
+
   KK.claude = {
+    stream,
     /* 전달사항·중요 메모를 개조식으로 다듬기: [{ref,type,to,date,title,detail}] → [{ref,title,points}] */
     async polish({ apiKey, model, effort, items, signal }) {
       const out = await call({

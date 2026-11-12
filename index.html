@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="ko" data-ver="kk-v23">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>끄적노트</title>
+<meta name="theme-color" content="#EEF1F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1116" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 레이아웃: 위쪽 탭(쓰기·일정·노트) + 한 화면 전체를 쓰는 작성란. 가로·세로 같은 구조 */
+:root{
+  --paper:#EEF1F4; --sheet:#FFFFFF; --ink:#1B2230; --muted:#5D6677; --line:#D6DCE5; --rule:#E4E9F1;
+  --accent:#2346C4; --accent-ink:#FFFFFF; --accent-soft:#E2E8FB; --mark:#F6DC5C; --mark-ink:#3A2F00;
+  --danger:#B93838; --danger-soft:#F8E3E3; --ok:#2C8457; --ok-soft:#DDF1E6; --shade:rgba(20,30,50,.08);
+  --f-display:"Gowun Batang","Noto Serif KR","Apple SD Gothic Neo",serif;
+  --f-body:"IBM Plex Sans KR","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Consolas",monospace;
+  --gut:max(16px,env(safe-area-inset-left,0px));
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E1116; --sheet:#161A21; --ink:#E3E7EE; --muted:#98A1B0; --line:#2A303A; --rule:#20252E;
+  --accent:#8EA6FF; --accent-ink:#0E1116; --accent-soft:#1E2847; --mark:#D8BD3A; --mark-ink:#1A1500;
+  --danger:#EE7B7B; --danger-soft:#3A1E22; --ok:#6AC994; --ok-soft:#173326; --shade:rgba(0,0,0,.35); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --paper:#0E1116; --sheet:#161A21; --ink:#E3E7EE; --muted:#98A1B0; --line:#2A303A; --rule:#20252E;
+  --accent:#8EA6FF; --accent-ink:#0E1116; --accent-soft:#1E2847; --mark:#D8BD3A; --mark-ink:#1A1500;
+  --danger:#EE7B7B; --danger-soft:#3A1E22; --ok:#6AC994; --ok-soft:#173326; --shade:rgba(0,0,0,.35); color-scheme:dark }
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;
+  -webkit-tap-highlight-color:transparent;overflow:hidden;display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none !important}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;touch-action:manipulation}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 머리줄 + 탭 */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px var(--gut) 8px;padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:-.02em;white-space:nowrap}
+.brand b{font-weight:700;background:linear-gradient(transparent 62%,var(--mark) 62%);padding:0 2px}
+.today{color:var(--muted);font-size:14px;white-space:nowrap}
+.tabs{display:flex;gap:4px;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:4px;margin-inline:auto}
+.tabs button{min-height:42px;min-width:84px;padding:0 18px;border-radius:9px;font-size:15px;font-weight:600;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.tabs button[aria-current="page"]{background:var(--accent);color:var(--accent-ink)}
+.tabs .cnt{font-family:var(--f-mono);font-size:12px;min-width:20px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff}
+.tabs .cnt:empty{display:none}
+.right{display:flex;align-items:center;gap:6px}
+.sync{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.sync[data-s="busy"]::before{background:var(--mark)}
+.gear{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
+.gear svg{width:22px;height:22px}
+@media (max-width:1000px){
+  .tabs button{min-width:0;padding:0 12px}
+  .today{display:none}
+  .sync{font-size:0;gap:0}
+  .gear{width:40px}
+}
+@media (max-width:760px){
+  .tabs{order:3;flex-basis:100%;margin:0}
+  .tabs button{flex:1;min-width:0}
+  .right{margin-left:auto}
+  .today{display:none}
+}
+
+.view{flex:1;min-height:0;display:none;flex-direction:column;padding:4px max(16px,env(safe-area-inset-right,0px)) 12px var(--gut)}
+body[data-view="write"] #vWrite,body[data-view="work"] #vWork,body[data-view="sched"] #vSched,body[data-view="notes"] #vNotes,body[data-view="rec"] #vRec,body[data-view="memo"] #vMemo{display:flex}
+#vMemo{overflow:auto}
+.vh{font-family:var(--f-display);font-size:19px;margin:6px 0 10px;display:flex;gap:8px;align-items:baseline}
+.msec{display:block}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.mcard{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:6px;align-content:start}
+.mcard .mt{font-weight:600;font-size:16px;line-height:1.45}
+.mcard .mt span{background:linear-gradient(transparent 60%,var(--mark) 60%);padding:0 2px}
+.mcard.hi{border-color:var(--danger)}
+.mcard .md{font-size:14.5px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.mcard .mdl{margin:0;padding-left:18px;font-size:14.5px;display:grid;gap:2px;overflow-wrap:anywhere}
+.mcard .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.mcard .row .btn{min-height:38px;padding:0 12px;font-size:14px}
+.mcard.done{opacity:.65}
+.ngroup h3{margin:0 0 6px;font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.ngroup ul,.mlist{list-style:none;margin:0;padding:0;background:var(--sheet);border:1px solid var(--line);border-radius:12px}
+.nrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-top:1px solid var(--line)}
+.nrow:first-child{border-top:0}
+.nrow.s-done .it-t,.nrow.s-cancel .it-t{text-decoration:line-through;color:var(--muted)}
+.nrow.s-done .chk i{background:var(--ok);border-color:var(--ok)}
+.nrow.s-done .chk svg{opacity:1}
+.vbar{display:flex;align-items:center;gap:10px;border-radius:12px;padding:6px 8px 6px 12px;font-size:14px;background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger);min-height:48px}
+.vbar .btn{margin-left:auto;min-height:36px}
+#vRec{overflow:auto}
+.rhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.rhead .search{flex:1 1 240px}
+.rfilter{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted);background:var(--accent-soft);border-radius:10px;padding:4px 6px 4px 12px}
+.rday{margin:8px 0 0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+.rcard{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.rcard.draft{border-color:var(--mark);box-shadow:0 0 0 1px var(--mark)}
+.rtitle{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:16px}
+.rplayer audio{width:100%}
+.rcard .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start}
+
+/* 공통 */
+.btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--sheet);font-size:15px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;color:inherit;text-decoration:none}
+.import-help{background:var(--sheet);border:1px dashed var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--muted);display:grid;gap:4px}
+.import-help b{color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.danger{color:var(--danger)}
+.btn svg{width:18px;height:18px}
+.chip{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;display:inline-block}
+.chip.plain{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.chip.new{background:var(--mark);color:var(--mark-ink)}
+.chip.wait{background:transparent;border:1px dashed var(--accent);color:var(--accent)}
+.when{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.empty{color:var(--muted);font-size:14px;padding:16px 4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sheet)}
+.seg button{min-height:40px;padding:0 13px;font-size:14px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.seg svg{width:18px;height:18px}
+
+/* 쓰기 */
+#vWrite{gap:8px}
+.edbar{display:flex;gap:8px;align-items:center}
+.nchips{display:flex;gap:6px;overflow-x:auto;min-width:0;flex:1;scrollbar-width:none;padding:2px}
+.nchip{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--sheet);white-space:nowrap;font-size:14px;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.nchip[aria-current="true"]{border-color:var(--accent);color:var(--accent);font-weight:600;background:var(--accent-soft)}
+.nchip.add{color:var(--muted);border-style:dashed}
+.icon-btn{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;color:var(--muted);flex:none}
+.icon-btn svg{width:20px;height:20px}
+.titlerow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.title-in{flex:1 1 200px;min-width:0;min-height:44px;border:0;background:transparent;font-family:var(--f-display);font-size:23px;font-weight:700;padding:0 2px}
+.title-in::placeholder{color:var(--muted);opacity:.6;font-weight:400}
+.rbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted);min-height:36px;border-radius:10px;padding:0 4px}
+.rbar button.more{color:var(--accent);font-weight:600;min-height:36px;padding:0 6px}
+.result{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:12px 16px;display:grid;gap:6px}
+.result ul{margin:0;padding-left:18px;display:grid;gap:2px}
+.result li{font-size:15px}
+.stale{color:var(--danger);font-size:13px}
+.sheet{position:relative;flex:1;min-height:0;background:var(--sheet);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px var(--shade)}
+.body-in{position:absolute;inset:0;width:100%;height:100%;resize:none;border:0;outline:0;background:transparent;
+  font-size:18px;line-height:34px;padding:6px 24px 96px;
+  background-image:linear-gradient(to bottom,transparent 33px,var(--rule) 33px);background-size:100% 34px;background-position:0 6px;background-attachment:local}
+.body-in::placeholder{color:var(--muted);opacity:.55}
+.penwrap{position:absolute;inset:0;background-color:var(--sheet);background-image:linear-gradient(to bottom,transparent 33px,var(--rule) 33px);background-size:100% 34px;background-position:0 6px}
+#ink{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.pentools{position:absolute;right:10px;top:10px;display:flex;gap:6px;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:5px;box-shadow:0 4px 14px var(--shade);flex-wrap:wrap;max-width:calc(100% - 20px);z-index:2}
+.pentools button{width:42px;height:42px;border-radius:9px;display:grid;place-items:center;color:var(--muted)}
+.pentools button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.pentools svg{width:20px;height:20px}
+.dot{width:16px;height:16px;border-radius:50%;display:block}
+.penhint{position:absolute;left:24px;bottom:28px;font-size:13px;color:var(--muted);pointer-events:none}
+.fab{position:absolute;right:16px;bottom:16px;z-index:3;min-height:54px;padding:0 24px;border-radius:14px;font-size:17px;font-weight:600;box-shadow:0 6px 20px var(--shade)}
+.busy{position:absolute;left:12px;right:12px;bottom:12px;z-index:4;display:flex;align-items:center;gap:10px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:12px;padding:10px 12px 10px 14px;font-size:15px}
+.busy .spin{width:18px;height:18px;flex:none;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+.busy .btn{margin-left:auto;min-height:38px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 일정 */
+#vSched{overflow:auto}
+.sched{width:100%;max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-bottom:24px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tile{background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:2px}
+.tile b{font-family:var(--f-mono);font-size:24px;font-weight:500;line-height:1.1}
+.tile span{font-size:13px;color:var(--muted)}
+.tile.warn b{color:var(--danger)}
+.tile.go b{color:var(--accent)}
+.tile.ok b{color:var(--ok)}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{display:flex;flex-direction:column;align-items:center;padding:6px 0 8px;border-radius:10px;min-height:64px;gap:2px}
+.day .dw{font-size:12px;color:var(--muted)}
+.day .dn{font-family:var(--f-mono);font-size:17px;padding:0 4px}
+.day.is-today .dn{background:linear-gradient(transparent 55%,var(--mark) 55%)}
+.day .pips{display:flex;gap:3px;height:6px}
+.day .pip{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.day .pip.t{background:transparent;border:1.5px solid var(--accent)}
+.day[aria-pressed="true"]{background:var(--sheet);box-shadow:0 0 0 1px var(--line)}
+.day.sun .dw{color:var(--danger)}
+.grp h3{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.04em;display:flex;gap:8px;align-items:baseline}
+.grp.overdue h3{color:var(--danger)}
+.grp ul{list-style:none;margin:0;padding:0;background:var(--sheet);border:1px solid var(--line);border-radius:12px}
+.it{display:grid;grid-template-columns:44px 58px minmax(0,1fr) auto;align-items:center;gap:4px;padding:4px 10px 4px 4px;border-top:1px solid var(--line)}
+.it:first-child{border-top:0}
+.chk{width:44px;height:44px;display:grid;place-items:center}
+.chk i{width:20px;height:20px;border:2px solid var(--muted);border-radius:6px;display:grid;place-items:center}
+.it.ev .chk i{border-radius:50%}
+.it.s-done .chk i{background:var(--ok);border-color:var(--ok)}
+.chk svg{width:14px;height:14px;color:var(--sheet);opacity:0}
+.it.s-done .chk svg{opacity:1}
+.it-main{min-width:0;text-align:left;padding:8px 0;display:block;width:100%}
+.tm{font-family:var(--f-mono);font-size:13px;color:var(--accent);line-height:1.25}
+.tm small{display:block;color:var(--muted);font-size:11px}
+.it-t{font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.it.s-done .it-t,.it.s-cancel .it-t{text-decoration:line-through;color:var(--muted)}
+.it-m{font-size:12.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;margin-top:1px}
+.pri{color:var(--danger);font-weight:600}
+.st{font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;min-height:30px;display:inline-flex;align-items:center;border:1px solid var(--line);color:var(--muted);background:var(--sheet)}
+.st.todo{color:var(--muted)}
+.st.doing{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.st.hold{color:var(--mark-ink);background:var(--mark);border-color:var(--mark)}
+.st.done{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.st.cancel{text-decoration:line-through}
+.st.late{color:var(--danger);border-color:var(--danger);background:var(--danger-soft)}
+.st.lock::after{content:"·직접";font-weight:500;opacity:.7;margin-left:2px}
+
+/* 노트 목록 */
+#vNotes{overflow:auto}
+.notes{width:100%;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:12px;padding-bottom:24px}
+.nhead{display:flex;gap:8px;flex-wrap:wrap}
+.search{flex:1 1 240px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--sheet);padding:0 12px}
+.ngrid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.ncard{display:grid;gap:4px;width:100%;height:100%;text-align:left;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--sheet)}
+.ncard[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.ncard .t{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ncard .s{color:var(--muted);font-size:13.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ncard .m{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.nfoot{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:20;
+  background:var(--ink);color:var(--sheet);border-radius:12px;padding:10px 12px 10px 16px;display:flex;gap:12px;align-items:center;font-size:15px;max-width:calc(100vw - 32px);box-shadow:0 8px 28px var(--shade)}
+.toast button{color:var(--mark);font-weight:600;min-height:36px;padding:0 6px;white-space:nowrap}
+
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--sheet);color:var(--ink);padding:0;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 48px)}
+dialog::backdrop{background:rgba(10,14,20,.45)}
+.dlg{padding:20px 22px;display:grid;gap:14px;overflow:auto;max-height:calc(100dvh - 50px)}
+.dlg h2{font-family:var(--f-display);font-size:21px;margin:0;overflow-wrap:anywhere}
+.dlg h3{font-size:15px;margin:0 0 6px}
+.dlg p{margin:0;font-size:14px;color:var(--muted)}
+.dlg label{display:grid;gap:6px;font-size:14px;font-weight:500}
+.dlg input[type=password],.dlg input[type=text],.dlg select{min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:0 12px;font-size:15px;width:100%}
+.dlg .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.dlg .sep{border-top:1px solid var(--line)}
+.dlg code{font-family:var(--f-mono);font-size:13px;background:var(--paper);padding:1px 5px;border-radius:5px}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.stgrid button{min-height:52px;border-radius:12px;border:1px solid var(--line);font-size:16px;font-weight:600;background:var(--paper)}
+.stgrid button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.gbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px;color:var(--muted);background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 14px}
+.gbar .warn{color:var(--danger)}
+.linkbtn{color:var(--accent);font-weight:600;font-size:14px;min-height:36px;padding:0 6px;margin-left:auto}
+.dup{color:var(--accent);font-weight:600}
+.st.cal{color:var(--muted);border-style:dashed}
+.it.gcal .chk{color:var(--muted)}
+.it.gcal .chk svg{width:20px;height:20px;opacity:.8;color:var(--muted)}
+.day .pip.g{background:var(--muted)}
+.chkrow{display:flex !important;grid-template-columns:none;align-items:center;gap:10px;font-weight:400 !important;min-height:40px}
+.chkrow input{width:20px;height:20px;flex:none}
+.masked{-webkit-text-security:disc}
+.dlg input#apiKey{font-family:var(--f-mono);font-size:14px}
+.okmsg{color:var(--ok);font-size:14px}
+.errmsg{color:var(--danger);font-size:14px}
+.vbar{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
+.vbar.dict{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.vdot{width:12px;height:12px;border-radius:50%;background:currentColor;flex:none;animation:blink 1.2s ease-in-out infinite}
+.vlive{color:var(--ink);font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+@keyframes blink{50%{opacity:.25}}
+#btnDictate[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+#btnRecord[aria-pressed="true"]{background:var(--danger-soft);color:var(--danger)}
+.recdot{display:none;width:8px;height:8px;border-radius:50%;background:var(--danger);flex:none;animation:blink 1.2s ease-in-out infinite}
+#btnRecord.rec-on .recdot{display:inline-block}
+#btnRecord.rec-on .lbl{display:inline !important;font-family:var(--f-mono);font-size:13px}
+#dlgRecStart,#dlgRecMark{width:min(520px,calc(100vw - 32px))}
+.rqtext{display:grid;gap:8px;font-size:14.5px;color:var(--ink);margin:0}
+.rqtext p{margin:0;color:var(--ink)}
+.rqtext ol,ol.rqtext{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14.5px}
+.rqpick{display:grid;gap:10px}
+.rqopt{display:grid;gap:4px;width:100%;min-height:64px;padding:14px 16px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--sheet);color:var(--ink)}
+.rqopt b{font-size:16px}
+.rqopt span{font-size:13.5px;line-height:1.5;color:var(--muted)}
+.rqopt:hover,.rqopt:focus-visible{border-color:var(--accent);background:var(--accent-soft)}
+.rqhelp{font-size:13.5px;color:var(--muted)}
+.rqhelp summary{cursor:pointer;color:var(--accent);font-weight:600;min-height:34px;display:flex;align-items:center}
+.rqhelp ul{margin:2px 0 0;padding-left:18px;display:grid;gap:4px}
+.recpill{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-family:var(--f-mono);font-size:13px;font-weight:600;white-space:nowrap}
+.recpill .recdot{display:inline-block}
+body[data-view="write"] .recpill{display:none}
+#dlgPri{width:min(680px,calc(100vw - 24px))}
+#dlgEdit,#dlgNote{width:min(560px,calc(100vw - 24px))}
+.acnt:not(:empty){font-family:var(--f-mono);font-size:12px;min-width:20px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+#dlgAtt{width:min(680px,calc(100vw - 24px))}
+.alist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
+.alist .wempty{padding:14px}
+.arow{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
+.arow:first-child{border-top:0}
+.akind{flex:none;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 7px}
+.amain{flex:1;min-width:0;display:grid;gap:2px}
+.amain .at{font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amain .am{font-size:12.5px;color:var(--muted)}
+@media (max-width:560px){.arow{flex-wrap:wrap}.amain{flex:1 1 calc(100% - 70px)}.arow .btn{min-height:36px}}
+#dlgAsk{width:min(880px,calc(100vw - 24px));height:min(92dvh,920px)}
+#dlgAsk .askdlg{height:100%;max-height:none;grid-template-rows:auto auto minmax(0,1fr) auto auto;overflow:hidden;box-sizing:border-box}
+#dlgAsk .mtop h2{flex:1}
+.qopts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.qlog{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:10px;padding:4px 2px}
+.qhint,.qinfo{margin:0;font-size:13.5px;color:var(--muted)}
+.qq{align-self:flex-end;max-width:85%;background:var(--accent-soft);color:var(--ink);border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.qa{align-self:stretch;background:var(--sheet);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 14px}
+.qa.qerr{color:var(--danger);border-color:var(--danger)}
+.qa .spin{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
+.qmeta{display:flex;gap:4px 10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:-4px}
+.qmeta .linkbtn{margin-left:0;min-height:30px;font-size:13px}
+.qin{display:flex;gap:8px;align-items:flex-end}
+.qin textarea{flex:1;min-height:52px;max-height:160px;resize:vertical;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:10px 12px;font:inherit;font-size:15px;color:var(--ink)}
+.qin .btn{min-height:52px;min-width:76px}
+.qnote{font-size:12.5px !important}
+#eType{justify-self:start}
+.ewhen{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px}
+.ewhen label[hidden]{display:none}
+@media (max-width:520px){.ewhen{grid-template-columns:1fr 1fr}.ewhen label:first-child{grid-column:1/-1}}
+.dlg input[type=date],.dlg input[type=time],#eDetail{min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:0 12px;font-size:15px;width:100%;color:var(--ink)}
+#eDetail{padding:10px 12px;line-height:1.5;resize:vertical;font:inherit;font-size:15px}
+.nli{position:relative}
+.nli .ncard .t{padding-right:40px}
+.nedit{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
+.nedit:hover,.nedit:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.nedit svg{width:20px;height:20px}
+.body-mark{position:absolute;inset:0;overflow:hidden;pointer-events:none;font-size:18px;line-height:34px;padding:6px 24px 96px;white-space:pre-wrap;overflow-wrap:break-word;color:transparent;scrollbar-gutter:stable}
+.body-in{scrollbar-gutter:stable}
+.body-mark del{text-decoration:line-through;text-decoration-color:var(--danger);text-decoration-thickness:2px;background:var(--danger-soft);border-radius:3px}
+.about{align-items:center}
+.about #appVer{font-family:var(--f-mono);font-size:13px;color:var(--muted);margin-right:auto}
+#dlgDocs{width:min(860px,calc(100vw - 24px))}
+#dlgDocs .dtop{position:sticky;top:-20px;z-index:1;display:grid;gap:10px;background:var(--sheet);margin:-20px -22px 0;padding:16px 22px 10px;border-bottom:1px solid var(--line)}
+.kdoc h2,.kdoc h3,.kdoc h4,.kdoc h5{scroll-margin-top:120px}
+#dTabs{justify-self:start;max-width:100%;overflow-x:auto}
+#dlgDocs .dlg>*{min-width:0}
+.kdoc{font-size:15px;line-height:1.65;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+.kdoc h2{font-size:22px;margin:4px 0 10px}
+.kdoc h3{font-size:18px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.kdoc h4{font-size:16px;margin:16px 0 6px}
+.kdoc h5{font-size:15px;margin:12px 0 4px}
+.kdoc p{margin:6px 0;font-size:15px;color:var(--ink)}
+.kdoc ul,.kdoc ol{margin:4px 0;padding-left:22px}
+.kdoc li{margin:2px 0}
+.kdoc li.todo{list-style:none;margin-left:-20px}
+.kdoc li.todo .box{display:inline-grid;place-items:center;width:16px;height:16px;border:1.5px solid var(--muted);border-radius:4px;margin-right:8px;font-size:11px;vertical-align:-2px}
+.kdoc li.todo.ok .box{background:var(--ok);border-color:var(--ok);color:#fff}
+.kdoc code{font-family:var(--f-mono);font-size:.9em;background:var(--accent-soft);border-radius:4px;padding:0 4px}
+.kdoc pre{font-family:var(--f-mono);font-size:13px;line-height:1.5;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre}
+.kdoc hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.kdoc blockquote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0}
+.kdoc a{color:var(--accent)}
+.ktable{overflow-x:auto;margin:8px 0}
+.kdoc table{border-collapse:collapse;font-size:14px;min-width:100%}
+.kdoc th,.kdoc td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.kdoc th{background:var(--accent-soft);font-weight:600;white-space:nowrap}
+.plist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
+.prow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-top:1px solid var(--line)}
+.prow:first-child{border-top:0}
+.prow.need{box-shadow:inset 3px 0 0 var(--accent)}
+.pmain{flex:1 1 220px;min-width:0;display:grid;gap:2px}
+.pt{font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.pm{font-size:12.5px;color:var(--muted)}
+.pm b{color:var(--accent);font-weight:600}
+.prow.done .pt{text-decoration:line-through;color:var(--muted)}
+.pctl{display:flex;align-items:center;gap:8px;margin-left:auto}
+.pseg button{min-height:40px;padding:0 13px}
+.pseg button.p-high[aria-pressed="true"]{background:var(--danger-soft);color:var(--danger)}
+.pseg button.p-low[aria-pressed="true"]{background:var(--paper);color:var(--ink)}
+.pseg button:disabled{opacity:.4;cursor:default}
+.pdone{min-height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;color:var(--muted);background:var(--sheet)}
+.pdone[aria-pressed="true"]{background:var(--ok-soft);color:var(--ok);border-color:var(--ok);font-weight:600}
+.wtag em.hi{color:var(--danger);border-color:var(--danger)}
+@media (max-width:980px){.edbar .lbl{display:none}}
+.reclist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.reclist li{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px}
+.reclist audio{width:100%}
+.reclist .row{justify-content:space-between}
+.sbox{min-height:48px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:0 14px;font-size:16px;width:100%}
+.sres{display:grid;gap:14px}
+.sres h3{display:flex;gap:8px;align-items:baseline;margin:0 0 4px;font-size:15px}
+.srline{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-size:15px;margin-top:6px;overflow-wrap:anywhere}
+.srline mark{background:var(--mark);color:var(--mark-ink);border-radius:3px;padding:0 1px}
+#dlgSearch{width:min(720px,calc(100vw - 32px))}
+/* 일정: 주간·월간 */
+#vSched.calmode #week,#vSched.calmode #segStatus{display:none}
+#vSched.calmode .sched{max-width:1200px}
+.cal{display:grid;gap:8px}
+.cal:empty{display:none}
+.cnav{display:flex;align-items:center;gap:4px}
+.cnav h2{font-family:var(--f-display);font-size:20px;margin:0 6px}
+.cnav .nav{min-width:44px;font-size:22px;padding:0 10px;line-height:1}
+.cscroll{overflow-x:auto}
+.cweek{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) repeat(2,minmax(0,.8fr));gap:6px;min-width:700px}
+.cday{background:var(--sheet);border:1px solid var(--line);border-radius:12px;min-height:300px;display:flex;flex-direction:column;min-width:0}
+.cday.wkend{background:var(--paper)}
+.cday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cdh{display:flex;align-items:baseline;gap:6px;padding:8px 10px 6px;border-bottom:1px solid var(--rule)}
+.cdh span{font-size:12.5px;color:var(--muted)}
+.cdh b{font-family:var(--f-mono);font-size:18px;font-weight:500}
+.cdh small{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.cday.today .cdh b{background:linear-gradient(transparent 55%,var(--mark) 55%)}
+.cday.sun .cdh span,.cday.sun .cdh b{color:var(--danger)}
+.cdl{display:flex;flex-direction:column;gap:4px;padding:6px}
+.cchip{display:block;width:100%;text-align:left;font-size:13px;line-height:1.35;padding:4px 7px;border-radius:7px;background:var(--accent-soft);color:var(--ink);border-left:3px solid var(--accent);overflow-wrap:anywhere}
+.cchip b{font-family:var(--f-mono);font-weight:500;font-size:11.5px;color:var(--accent);margin-right:4px}
+.cchip.t{background:var(--sheet);border:1px solid var(--line);border-left:3px solid var(--accent)}
+.cchip.g{background:var(--paper);border-left-color:var(--muted)}
+.cchip.g b{color:var(--muted)}
+.cchip.v-late{border-left-color:var(--danger);background:var(--danger-soft)}
+.cchip.done,.cchip.v-past{opacity:.6}
+.cchip.done span{text-decoration:line-through}
+.cmh{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));font-size:12.5px;color:var(--muted);text-align:center}
+.cmh .sun{color:var(--danger)}
+.cgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ccell{background:var(--sheet);min-height:100px;padding:4px 5px 6px;display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0}
+.ccell.out{background:var(--paper)}
+.ccell.out .cn{opacity:.45}
+.ccell.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+.ccell .cn{font-family:var(--f-mono);font-size:13px;align-self:flex-start;padding:0 4px;border-radius:6px;line-height:1.6}
+.ccell.sun .cn{color:var(--danger)}
+.ccell.today .cn{background:var(--accent);color:var(--accent-ink)}
+.ccell .cchip{font-size:11.5px;padding:1px 4px;border-radius:4px;border-left-width:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccell .cchip b{font-size:10.5px;margin-right:3px}
+.cmore{font-size:11px;color:var(--muted);padding-left:4px}
+@media (max-width:600px){.ccell{min-height:66px;padding:2px}.ccell .cchip{font-size:10px}.ccell .cchip b{display:none}}
+#dlgBoard{width:min(760px,calc(100vw - 24px))}
+.blist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;max-height:46vh;overflow:auto}
+.blist li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 10px;border-top:1px solid var(--rule)}
+.blist li:first-child{border-top:0}
+.blist input[type=checkbox]{width:20px;height:20px}
+.blist .bt{font-size:15px;overflow-wrap:anywhere}
+.blist .bt small{margin-left:8px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.blist select{min-height:38px;font-size:13.5px;max-width:42vw}
+.dlg input#boardKey{font-family:var(--f-mono);font-size:14px}
+/* 업무 탭 — 할 일 / 한 일 / 월간 요약. 단순하게 */
+#vWork{overflow:auto}
+.work{width:100%;max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-bottom:24px}
+.whead{display:flex;align-items:center;gap:4px}
+.whead h2{font-family:var(--f-display);font-size:22px;margin:0 6px}
+.whead .nav{min-width:46px;font-size:24px;padding:0 10px;line-height:1}
+.whead .nav:disabled{opacity:.25;cursor:default}
+.wcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:820px){.wcols{grid-template-columns:minmax(0,1fr)}}
+.wcol{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:14px 12px 6px 14px;display:grid;gap:12px}
+.wcol h3{margin:0;font-size:17px;display:flex;align-items:baseline;gap:8px}
+.wcol h3 b{font-family:var(--f-mono);font-size:15px;font-weight:500;color:var(--accent)}
+.wsec h4{margin:0 0 2px;font-size:12.5px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:baseline}
+.wsec h4 span{font-family:var(--f-mono);font-weight:400}
+.wsec ul{list-style:none;margin:0;padding:0}
+.wrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:2px;border-top:1px solid var(--rule);min-height:48px}
+.wsec ul .wrow:first-child{border-top:0}
+.wmain{text-align:left;padding:7px 0;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.wt{font-size:15.5px;overflow-wrap:anywhere}
+.wtag em{font-style:normal;font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 7px;margin-right:4px;white-space:nowrap}
+.wtag em.go{color:var(--accent);border-color:var(--accent)}
+.wdate{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);padding:0 4px;white-space:nowrap}
+.wdate.late{color:var(--danger);font-weight:600}
+.wrow.s-done .chk i{background:var(--ok);border-color:var(--ok)}
+.wrow.s-done .chk svg{opacity:1}
+.wrow.s-done .wt{color:var(--muted)}
+.wrow.late .chk i{border-color:var(--danger)}
+.wrow.meet .chk svg{width:20px;height:20px;opacity:1;color:var(--accent)}
+.wempty{color:var(--muted);font-size:14px;margin:0 0 10px}
+.wsum{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px}
+.wsum-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.wsum-h h3{margin:0;font-size:17px;flex:1;display:flex;gap:8px;align-items:baseline}
+.wline{margin:0;font-size:16px;font-weight:600;line-height:1.55}
+.wareas{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.warea{border-left:3px solid var(--accent);padding:1px 0 1px 10px}
+.warea b{font-size:14.5px}
+.warea ul,.wlists ul{margin:4px 0 0;padding-left:18px;font-size:14px;display:grid;gap:2px}
+.wlists{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;border-top:1px solid var(--rule);padding-top:12px}
+.wlists b{font-size:13px;color:var(--muted)}
+.carry{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14px;background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:2px 6px 2px 12px;min-height:40px}
+.carry .linkbtn{margin-left:auto}
+.carry.old{background:var(--mark);color:var(--mark-ink)}
+.carry.old .linkbtn{color:var(--mark-ink)}
+.mhead{grid-column:1/-1;display:flex;align-items:baseline;gap:8px;margin-top:8px}
+.mhead h3{margin:0;font-size:15px}
+.mhead .linkbtn{margin-left:0}
+@media (max-width:760px){.tabs button{padding:0 2px;font-size:14px;min-height:40px;white-space:nowrap;gap:3px}.tabs .tl{display:none}.tabs .cnt{min-width:16px;padding:0 4px;font-size:11px}}
+
+
+/* 회의록 만들기 */
+#dlgMinutes{width:min(920px,calc(100vw - 24px))}
+.mtop{display:flex;align-items:center;gap:10px}
+.mtop h2{flex:1}
+.mstep{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.mstep h3{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin:0;font-size:16px}
+.mstep h3 .when{font-family:var(--f-body);font-size:13px;font-weight:400}
+.dlg textarea.mta{width:100%;min-height:200px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:10px 12px;font-size:15px;line-height:1.6;resize:vertical}
+.m2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){.m2{grid-template-columns:1fr}}
+.mtip{font-size:13.5px !important;background:var(--accent-soft);color:var(--ink) !important;border-radius:10px;padding:8px 12px}
+.mpick{display:grid;gap:6px;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--paper)}
+.mpick label{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start;font-weight:400;font-size:14px;padding:8px;border-radius:8px;background:var(--sheet);cursor:pointer}
+.mpick input{width:20px;height:20px;margin:2px 0 0}
+.mpick .pv{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mpick small{display:block;color:var(--muted);font-size:12px}
+.mrun{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mmsg{font-size:14px;color:var(--muted);flex:1 1 220px;min-width:0}
+.mmsg.err{color:var(--danger)}
+.mmsg.ok{color:var(--ok)}
+.mmsg .spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+.mpaper{background:#FFFFFF;border:1px solid var(--line);border-radius:8px;padding:20px 18px;overflow:auto;max-height:62vh}
+.mpaper .mdoc{min-width:600px}
+.mdl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mdl .lbl{font-size:14px;font-weight:600;margin-left:auto}
+
+/* 회의록 문서 (미리보기·인쇄 공통) — 종이 문서라 화면 테마와 상관없이 흰 바탕 검은 글씨 */
+.mdoc{font-family:"Malgun Gothic","맑은 고딕","Noto Sans KR","IBM Plex Sans KR",sans-serif;color:#000;font-size:14px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.mdoc h1{font-family:inherit;font-size:24px;font-weight:800;text-align:center;margin:6px 0 20px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.mdoc table{width:100%;border-collapse:collapse;border:2px solid #000;table-layout:fixed}
+.mdoc th,.mdoc td{border:1px solid #000;color:#000;padding:6px 9px;vertical-align:middle;text-align:left;overflow-wrap:anywhere}
+.mdoc th{background:#D9D9D9;color:#000;font-weight:400;text-align:center;padding:6px 2px;white-space:pre}
+.mdoc p{margin:0;color:#000;font-size:inherit}
+.mdoc p.h{font-weight:700}
+.mdoc p.h:not(:first-child){margin-top:8px}
+.mdoc p.b1{padding-left:1.4em;text-indent:-1.4em}
+.mdoc p.b2{padding-left:2.2em;text-indent:-.8em}
+#printArea{display:none}
+@media print{
+  @page{size:A4;margin:15mm}
+  html,body{height:auto !important;overflow:visible !important;background:#FFFFFF !important;display:block !important;padding:0 !important}
+  body > :not(#printArea){display:none !important}
+  #printArea{display:block !important}
+  #printArea .mdoc{font-size:11pt}
+  #printArea .mdoc h1{font-size:20pt}
+  #printArea .mdoc p{break-inside:avoid}
+}
+@media (prefers-reduced-motion:reduce){.busy .spin,.vdot,.mmsg .spin,.recdot{animation:none}}
+</style>
+</head>
+<body data-view="write">
+<header class="top">
+  <div class="brand">끄적<b>노트</b></div>
+  <div class="today" id="todayLabel"></div>
+  <nav class="tabs" aria-label="화면">
+    <button data-v="write" aria-current="page">쓰기</button>
+    <button data-v="work">업무 <span class="cnt" id="workTabCnt"></span></button>
+    <button data-v="sched">일정 <span class="cnt" id="tabCnt"></span></button>
+    <button data-v="memo"><span>전달<span class="tl">·메모</span></span><span class="cnt" id="memoTabCnt"></span></button>
+    <button data-v="notes">노트</button>
+    <button data-v="rec">녹음 <span class="cnt" id="recTabCnt"></span></button>
+  </nav>
+  <div class="right">
+    <button class="recpill" id="recPill" hidden type="button"><span class="recdot" aria-hidden="true"></span><span id="recPillT"></span></button>
+    <div class="sync" id="sync" data-s="ok">기기에 저장됨</div>
+    <button class="gear" id="btnAsk" aria-label="Claude에게 묻기" title="Claude에게 묻기 (노트·일정·붙인 자료를 읽고 답해요)"></button>
+    <button class="gear" id="btnSearch" aria-label="메모 검색"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
+    <button class="gear" id="btnSettings" aria-label="설정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
+  </div>
+</header>
+
+<main class="view" id="vWrite" aria-label="쓰기">
+  <div class="edbar">
+    <div class="nchips" id="noteChips"></div>
+    <button class="btn" id="btnPaste" title="복사해 둔 글이나 이미지를 노트에 붙여넣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg><span class="lbl">붙여넣기</span></button>
+    <button class="btn" id="btnAtt" title="이 노트에 관련 자료 붙이기 (노트에는 안 보이고, 질문할 때 Claude가 읽어요)"><span class="lbl">자료</span><span class="acnt" id="attCnt"></span></button>
+    <div class="seg" role="group" aria-label="음성">
+      <button id="btnDictate" aria-pressed="false" title="말하면 노트에 글자로 적혀요 (무료)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span class="lbl">받아쓰기</span></button>
+      <button id="btnRecord" aria-pressed="false" title="소리를 녹음해 이 노트에 저장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg><span class="recdot" aria-hidden="true"></span><span class="lbl" id="recLbl">녹음</span></button>
+      <button id="btnRecList" hidden title="이 노트의 녹음 듣기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 5v14l11-7z"/></svg><span id="recCount"></span></button>
+    </div>
+    <div class="seg" role="group" aria-label="입력 방식">
+      <button id="modeType" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/></svg>타자</button>
+      <button id="modePen" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"/><path d="M14 7l3 3"/></svg>필기</button>
+    </div>
+  </div>
+  <div class="titlerow">
+    <input class="title-in" id="noteTitle" placeholder="제목은 정리할 때 붙어요" autocomplete="off">
+    <div class="rbar" id="rbar"></div>
+  </div>
+  <div class="carry" id="carry" hidden role="status"></div>
+  <div class="carry" id="daybar" hidden role="status"></div>
+  <div class="vbar" id="vbar" hidden role="status"><span class="vdot"></span><b id="voiceLabel"></b><span id="voiceLive" class="vlive"></span><button class="btn" id="btnVoiceStop">끝내기</button></div>
+  <section class="result" id="result" hidden></section>
+  <div class="sheet">
+    <div class="body-mark" id="bodyMark" aria-hidden="true"></div>
+    <textarea class="body-in" id="body" spellcheck="false" placeholder="이 노트 하나에 계속 이어서 적으세요. 예)
+내일 10시 팀 회의 3층 회의실
+금요일까지 결과보고서 초안 → 팀장님께
+11/12(목)   ← 날짜만 한 줄 적으면 전날까지 못 끝낸 일을 불러와요
+보고서 반쯤 함 / 회의는 다음주로 연기
+//   ← 마지막 줄에 // 를 쓰면 일정과 상태가 정리돼요"></textarea>
+    <div class="penwrap" id="penWrap" hidden>
+      <canvas id="ink" aria-label="필기 영역"></canvas>
+      <div class="pentools" role="toolbar" aria-label="펜 도구">
+        <button data-color="ink" aria-pressed="true" aria-label="검정 펜"><span class="dot" style="background:var(--ink)"></span></button>
+        <button data-color="blue" aria-pressed="false" aria-label="파랑 펜"><span class="dot" style="background:var(--accent)"></span></button>
+        <button data-color="red" aria-pressed="false" aria-label="빨강 펜"><span class="dot" style="background:var(--danger)"></span></button>
+        <button id="penErase" aria-pressed="false" aria-label="지우개"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 20h12M5 15l8-8 5 5-6 6H8z"/></svg></button>
+        <button id="penUndo" aria-label="되돌리기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 7L4 12l5 5"/><path d="M4 12h10a6 6 0 010 12h-2" transform="translate(0 -6)"/></svg></button>
+        <button id="penClear" aria-label="필기 모두 지우기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="penhint" id="penHint">S Pen으로 쓰세요. 정리하면 글자로 바뀌어 노트에 붙어요.</div>
+    </div>
+    <button class="btn primary fab" id="btnOrganize">정리하기</button>
+    <div class="busy" id="busy" hidden><span class="spin"></span><span id="busyText">Claude가 메모를 읽고 있어요</span><button class="btn" id="btnStop">중지</button></div>
+  </div>
+</main>
+
+<main class="view" id="vWork" aria-label="업무">
+  <div class="work" id="workView"></div>
+</main>
+
+<main class="view" id="vSched" aria-label="일정">
+  <div class="sched">
+    <div class="gbar" id="gbar" hidden></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="ctrl">
+      <div class="seg" role="group" aria-label="보기 방식" id="segView">
+        <button data-c="list" aria-pressed="true">목록</button><button data-c="week" aria-pressed="false">주간</button><button data-c="month" aria-pressed="false">월간</button>
+      </div>
+      <div class="seg" role="group" aria-label="상태 보기" id="segStatus">
+        <button data-s="open" aria-pressed="true">할 것</button><button data-s="done" aria-pressed="false">완결</button><button data-s="other" aria-pressed="false">취소·보류</button>
+      </div>
+      <div class="seg" role="group" aria-label="종류" id="segType">
+        <button data-f="all" aria-pressed="true">전체</button><button data-f="event" aria-pressed="false">약속</button><button data-f="task" aria-pressed="false">할 일</button>
+      </div>
+    </div>
+    <div class="cal" id="cal"></div>
+    <div class="week" id="week"></div>
+    <div id="slist" style="display:flex;flex-direction:column;gap:16px"></div>
+    <div class="nfoot"><button class="btn ghost" id="btnIcsAll">남은 일정 캘린더 파일(.ics)로 내보내기</button></div>
+  </div>
+</main>
+
+<main class="view" id="vNotes" aria-label="노트 목록">
+  <div class="notes">
+    <div class="nhead">
+      <input class="search" id="search" type="search" placeholder="노트 검색 (제목·내용·태그)" autocomplete="off">
+      <button class="btn" id="btnImportNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>삼성 노트 가져오기</button>
+      <button class="btn" id="btnNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>새 노트</button>
+      <input type="file" id="importNoteFile" multiple accept=".txt,.pdf,.jpg,.jpeg,.png,.webp,text/plain,application/pdf,image/*,audio/*,.m4a,.mp3,.wav" hidden>
+    </div>
+    <div class="import-help" id="importHelp">
+      <div><b>삼성 노트 가져오기</b> — 삼성 노트에서 노트를 열고 <b>공유</b> → 파일 형식 <b>PDF</b>(손글씨 노트) 또는 <b>텍스트 파일</b> → <b>끄적노트</b>를 고르세요.</div>
+      <div>공유 목록에 끄적노트가 없으면 PDF로 <b>파일 저장</b>한 뒤 위의 '삼성 노트 가져오기'로 고르면 돼요. 여러 개를 한 번에 골라도 돼요. 가져온 노트는 Claude가 글자로 옮기고 일정까지 정리해요.</div>
+    </div>
+    <ul class="ngrid" id="noteList"></ul>
+    <div class="nfoot"><span id="storeNote">노트는 이 태블릿 안에만 저장돼요.</span></div>
+  </div>
+</main>
+
+<main class="view" id="vMemo" aria-label="전달사항과 중요 메모">
+  <div class="sched">
+    <div class="ctrl">
+      <div class="seg" role="group" aria-label="보기" id="segMemo">
+        <button data-m="open" aria-pressed="true">지금 볼 것</button><button data-m="done" aria-pressed="false">전달함·보관</button>
+      </div>
+      <button class="btn" id="btnPolish" title="전달사항·중요 메모를 Claude가 핵심만 남겨 개조식으로 다시 써요">간결하게 다듬기</button>
+    </div>
+    <div class="import-help" id="memoHint" hidden></div>
+    <section class="msec">
+      <h2 class="vh">중요 메모 <span class="when" id="memoCount"></span></h2>
+      <div id="memoList"></div>
+    </section>
+    <section class="msec">
+      <h2 class="vh">전달사항 <span class="when" id="noticeCount"></span></h2>
+      <div id="noticeList" style="display:flex;flex-direction:column;gap:14px"></div>
+    </section>
+  </div>
+</main>
+
+<main class="view" id="vRec" aria-label="녹음">
+  <div class="notes">
+    <div class="import-help">
+      <div><b>긴 회의 녹음은 삼성 '음성 녹음' 앱을 추천해요.</b> 화면을 꺼도 계속 녹음되고, Galaxy AI 텍스트 변환으로 글로 바꿀 수 있어요.</div>
+      <div>음성 녹음 앱에서 변환한 글(녹음 파일과 함께 또는 따로)을 <b>공유 → 끄적노트</b>로 보내면, 여기 녹음에 묶이고 <b>회의록이 자동으로 만들어져요</b>. 향후조치는 <b>업무 탭 할 일</b>로 들어가요.</div>
+      <div>회의록은 녹음 카드의 <b>회의록 보기</b>에서 고쳐 쓰고 한글·Word·PDF로 받을 수 있어요. 끄적노트의 녹음 버튼도 녹음은 되지만, 글로 바꾸는 기능은 없어서 회의록에는 녹음 중 쓴 메모만 들어가요.</div>
+      <div>끄적노트 녹음은 <b>앱 안에 저장</b>돼서 다른 앱에는 보이지 않아요. 다른 앱에서 쓰려면 녹음 카드의 <b>공유</b>나 <b>파일로 받기</b>(다운로드 폴더)를 쓰세요.</div>
+    </div>
+    <div id="recView" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</main>
+
+<div class="toast" id="toast" hidden><span id="toastText"></span><button id="toastBtn" hidden></button></div>
+<div id="printArea" aria-hidden="true"></div>
+
+<dialog id="dlgItem">
+  <form method="dialog" class="dlg" id="itemForm">
+    <h2 id="itTitle"></h2>
+    <p id="itMeta"></p>
+    <div id="itStatusBox">
+      <h3>상태</h3>
+      <div class="stgrid" id="itStatus"></div>
+      <p style="margin-top:8px">직접 바꾼 상태는 다시 정리해도 Claude가 바꾸지 않아요.</p>
+    </div>
+    <div id="itPriBox" hidden>
+      <h3>우선순위</h3>
+      <div class="seg pseg" id="itPri" role="group" aria-label="우선순위"></div>
+    </div>
+    <div class="row" id="itActions"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn primary" value="close">닫기</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgSearch">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2>메모 검색</h2>
+    <input class="sbox" id="searchQ" type="search" placeholder="찾을 말 (모든 노트의 내용에서 찾아요)" autocomplete="off">
+    <div class="sres" id="searchResults"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn primary" type="button" id="btnSearchClose">닫기</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgMinutes" aria-labelledby="mHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="mHead">회의록 만들기</h2><button type="button" class="btn ghost" id="mClose">닫기</button></div>
+    <p id="mRecMeta"></p>
+
+    <section class="mstep">
+      <h3>① 회의 내용 글 <span class="when" id="mSrcCount"></span></h3>
+      <textarea class="mta" id="mSrc" spellcheck="false" placeholder="녹음을 글로 옮긴 녹취록이나 회의하면서 적은 메모를 넣어 주세요.&#10;아래 버튼으로 붙여넣거나, 텍스트 파일을 불러오거나, 노트에서 골라 넣을 수 있어요."></textarea>
+      <div class="row">
+        <button type="button" class="btn" id="mPaste">붙여넣기</button>
+        <button type="button" class="btn" id="mFile">텍스트 파일</button>
+        <button type="button" class="btn" id="mFromNote">노트에서 가져오기</button>
+        <input type="file" id="mFileIn" accept=".txt,.md,.srt,.vtt,text/plain" hidden>
+        <span class="mmsg" id="mSrcMsg"></span>
+      </div>
+      <div id="mPick" hidden></div>
+      <p class="mtip">Claude는 녹음 소리를 직접 듣지 못해요. 삼성 '음성 녹음' 앱에서 회의를 녹음하고 <b>텍스트 변환</b>한 글을 복사해 붙여넣으면 가장 정확해요. 변환 글과 녹음 파일을 함께 <b>공유 → 끄적노트</b>로 보내면 여기에 자동으로 들어가요.</p>
+    </section>
+
+    <section class="mstep">
+      <h3>② 기본 정보 <span class="when">비워 두면 Claude가 글에서 찾아 채워요</span></h3>
+      <label>회의명<input type="text" id="mTitle" autocomplete="off"></label>
+      <div class="m2">
+        <label>일시<input type="text" id="mWhen" autocomplete="off"></label>
+        <label>장소<input type="text" id="mPlace" autocomplete="off"></label>
+      </div>
+      <label>참석자<input type="text" id="mAtt" autocomplete="off"></label>
+    </section>
+
+    <div class="mrun">
+      <button type="button" class="btn primary" id="mRun">Claude로 회의록 만들기</button>
+      <button type="button" class="btn" id="mStop" hidden>그만두기</button>
+      <span class="mmsg" id="mMsg"></span>
+    </div>
+
+    <section class="mstep" id="mOut" hidden>
+      <h3>③ 회의록 <span class="when" id="mMade"></span></h3>
+      <div class="mpaper" id="mPreview"></div>
+      <textarea class="mta" id="mEdit" spellcheck="false" hidden style="min-height:360px"></textarea>
+      <div class="mdl">
+        <button type="button" class="btn" id="mEditBtn">글 고치기</button>
+        <span class="lbl">내려받기</span>
+        <button type="button" class="btn primary" data-fmt="hwpx">한글 (HWPX)</button>
+        <button type="button" class="btn primary" data-fmt="docx">Word (DOCX)</button>
+        <button type="button" class="btn primary" data-fmt="pdf">PDF</button>
+      </div>
+      <p class="mmsg" id="mDlMsg"></p>
+    </section>
+  </form>
+</dialog>
+
+<dialog id="dlgBoard" aria-labelledby="bHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="bHead">업무보드에 올리기</h2><button type="button" class="btn ghost" id="bClose">닫기</button></div>
+    <p>고른 할 일을 공공보건의료사업팀 업무보드의 <b>업무 목록</b>에 올려요. 올린 뒤에 끄적노트에서 상태(진행·완료 등)나 기한이 바뀌면 보드에도 맞춰져요.</p>
+    <div class="m2">
+      <label>담당<input type="text" id="bOwner" maxlength="40" autocomplete="off" placeholder="예: 이름"></label>
+      <label>사업 (모두 같을 때)<input type="text" id="bArea" maxlength="40" autocomplete="off" placeholder="예: 인력 양성"></label>
+    </div>
+    <div class="row" style="justify-content:space-between"><b style="font-size:14px">올릴 할 일</b><button type="button" class="linkbtn" id="bAll">모두 선택·해제</button></div>
+    <div id="bList"></div>
+    <div class="mrun"><button type="button" class="btn primary" id="bGo">보드에 올리기</button><span class="mmsg" id="bMsg"></span></div>
+  </form>
+</dialog>
+
+<dialog id="dlgAtt" aria-labelledby="aHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="mtop"><h2 id="aHead" tabindex="-1" style="outline:none">관련 자료</h2><button type="button" class="btn ghost" id="aClose">닫기</button></div>
+    <p>이 노트에 붙인 자료예요. 노트 화면에는 보이지 않고, <b>질문할 때 Claude가 함께 읽어요</b>. PDF·사진·한글(.hwpx)·워드·파워포인트·엑셀·글 파일을 읽을 수 있어요. 한글 .hwp는 .hwpx나 PDF로 저장해 붙여 주세요.</p>
+    <div class="row"><button type="button" class="btn primary" id="aAdd">자료 붙이기</button><input type="file" id="aFile" multiple hidden></div>
+    <ul class="alist" id="aList"></ul>
+  </form>
+</dialog>
+
+<dialog id="dlgAsk" aria-labelledby="qHead">
+  <form method="dialog" class="dlg askdlg" onsubmit="return false">
+    <div class="mtop"><h2 id="qHead">Claude에게 묻기</h2><button type="button" class="btn ghost" id="qNew">새 질문</button><button type="button" class="btn ghost" id="qClose">닫기</button></div>
+    <div class="qopts">
+      <div class="seg" id="qScope" role="group" aria-label="무엇을 읽고 답할지"><button type="button" data-s="note">지금 노트</button><button type="button" data-s="month">이번 달</button><button type="button" data-s="all">전체</button></div>
+      <label class="chkrow"><input type="checkbox" id="qAtt" checked>붙인 자료도 읽기</label>
+    </div>
+    <div class="qlog" id="qLog" aria-live="polite"></div>
+    <div class="qin"><textarea id="qText" rows="2" placeholder="물어볼 내용 (Ctrl+Enter로 보내기)"></textarea><button type="button" class="btn primary" id="qGo">묻기</button></div>
+    <p class="qnote">노트·일정·붙인 자료가 Anthropic으로 전송돼요. 환자 개인정보는 넣지 마세요. 질문마다 API 요금이 들어요(같은 자료로 이어 물으면 덜 들어요).</p>
+  </form>
+</dialog>
+
+<dialog id="dlgEdit" aria-labelledby="eHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="eHead" tabindex="-1" style="outline:none">고치기</h2>
+    <div class="seg" id="eType" role="group" aria-label="종류">
+      <button type="button" data-t="event">약속</button><button type="button" data-t="task">할 일</button><button type="button" data-t="notice">전달</button><button type="button" data-t="memo">메모</button>
+    </div>
+    <label>제목<input type="text" id="eTitle" maxlength="80" autocomplete="off"></label>
+    <label id="eToL">대상<input type="text" id="eTo" maxlength="40" autocomplete="off" placeholder="예: 팀장님, 기획팀"></label>
+    <div class="ewhen" id="eWhen">
+      <label><span id="eDateL">날짜</span><input type="date" id="eDate"></label>
+      <label id="eTimeL">시작<input type="time" id="eTime"></label>
+      <label id="eEndL">끝<input type="time" id="eEnd"></label>
+    </div>
+    <label id="ePlaceL">장소<input type="text" id="ePlace" maxlength="60" autocomplete="off"></label>
+    <label>내용<textarea id="eDetail" rows="3" maxlength="600" placeholder="보충 설명 (없으면 비워 두세요)"></textarea></label>
+    <label class="chkrow" id="eNoteL"><input type="checkbox" id="eNote" checked>노트에도 적기 — 원래 적은 부분에 취소선, 바로 아래에 고친 내용</label>
+    <p>직접 고친 내용은 다시 정리해도 Claude가 바꾸지 않아요.</p>
+    <p class="errmsg" id="eMsg" role="alert"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="eCancel">취소</button>
+      <button type="button" class="btn primary" id="eSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgNote" aria-labelledby="nHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="nHead" tabindex="-1" style="outline:none">노트 고치기</h2>
+    <label>노트 이름<input type="text" id="nTitle" maxlength="60" autocomplete="off" placeholder="비우면 정리할 때 자동으로 붙어요"></label>
+    <p id="nInfo"></p>
+    <div class="row">
+      <button type="button" class="btn" id="nOpen">내용 고치기 (쓰기 화면)</button>
+      <button type="button" class="btn danger" id="nDel">노트 삭제</button>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="nCancel">취소</button>
+      <button type="button" class="btn primary" id="nSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgDocs" aria-labelledby="dHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <div class="dtop">
+      <div class="mtop"><h2 id="dHead" tabindex="-1" style="outline:none">안내 문서</h2><button type="button" class="btn ghost" id="dClose">닫기</button></div>
+      <div class="seg" id="dTabs" role="group" aria-label="문서 고르기"></div>
+    </div>
+    <div class="kdoc" id="dBody"></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPri" aria-labelledby="pHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="pHead" tabindex="-1" style="outline:none">우선순위 정하기</h2>
+    <p id="pText"></p>
+    <ul class="plist" id="pList"></ul>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="pLater">나중에</button>
+      <button type="button" class="btn primary" id="pSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecStart" aria-labelledby="rqHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="rqHead">어떻게 녹음할까요?</h2>
+    <div class="rqpick">
+      <button type="button" class="rqopt" id="rqWeb"><b>끄적노트로 녹음</b><span>바로 녹음 시작 · 파일은 끄적노트 녹음 탭에 저장<br>노트를 쓰거나 다른 탭을 봐도 계속 녹음 · 녹음 버튼이나 위쪽 ●를 누르면 끝남 · 앱을 닫으면 멈춤</span></button>
+      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음<br>노트에 시작 표시 → 음성 녹음 앱을 직접 열어 녹음 → 끝나면 공유 → 끄적노트</span></button>
+    </div>
+    <details class="rqhelp" id="rqHelp">
+      <summary>음성 녹음 앱이 저절로 열리지 않는 이유 · 빨리 여는 법</summary>
+      <ul>
+        <li>끄적노트 같은 웹앱은 보안 규칙상 다른 앱을 열거나 그 앱의 녹음을 시작할 수 없어요</li>
+        <li>화면 아래 작업 표시줄의 음성 녹음 아이콘을 화면 오른쪽 끝으로 끌어 놓으면 화면 분할로 열려요</li>
+        <li>화면 분할로 두 앱을 연 뒤 가운데 막대의 메뉴에서 '앱 페어'로 저장해 두면, 다음부터 한 번 눌러 두 앱을 나란히 열 수 있어요 (메뉴 이름은 기기마다 조금 다를 수 있어요)</li>
+      </ul>
+    </details>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="rqCancel">취소</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecMark" aria-labelledby="rmHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="rmHead">음성 녹음 앱에서 녹음 중</h2>
+    <p id="rmText"></p>
+    <ol class="rqtext">
+      <li>음성 녹음 앱에서 녹음을 멈춰요 (필요하면 텍스트 변환)</li>
+      <li>녹음 목록에서 그 녹음을 <b>공유 → 끄적노트</b>로 보내요 — 녹음 파일과 변환 글을 함께 보내면 회의록이 자동으로 만들어져요</li>
+      <li>녹음을 시작한 노트에 붙어요. 이 표시는 그때 저절로 꺼져요</li>
+    </ol>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="rmClose">닫기</button>
+      <button type="button" class="btn" id="rmEnd">녹음 끝 표시</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecSave">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2>녹음을 저장할까요?</h2>
+    <p id="rsMeta"></p>
+    <audio id="rsAudio" controls preload="metadata" style="width:100%"></audio>
+    <label>이름
+      <input type="text" id="rsName" autocomplete="off">
+    </label>
+    <p>저장하면 녹음 탭에서 다시 듣고, 이름을 바꾸고, 파일로 받을 수 있어요.</p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn danger" id="rsDiscard">저장 안 함</button>
+      <button type="button" class="btn primary" id="rsSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgSettings">
+  <form method="dialog" class="dlg" id="settingsForm">
+    <h2>설정</h2>
+    <div class="row about"><span id="appVer">끄적노트</span><button type="button" class="btn" id="btnGuide">사용 안내</button><button type="button" class="btn" id="btnWorklog">작업 내역</button></div>
+    <div class="sep"></div>
+    <div>
+      <h3>Claude 연결 (정리 기능)</h3>
+      <p>노트 쓰기·보기·일정은 로그인 없이 됩니다. '정리하기'만 Claude API 키가 필요해요. 키는 이 태블릿에만 저장되고 Anthropic 서버로만 전송됩니다.</p>
+    </div>
+    <div style="display:grid;gap:6px">
+      <label for="apiKey">API 키</label>
+      <input type="text" id="apiKey" class="masked" placeholder="sk-ant-로 시작하는 키" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="row">
+        <button type="button" class="btn primary" id="btnPasteKey">붙여넣기</button>
+        <button type="button" class="btn" id="btnKeyFromNote">노트에 붙여넣은 키 가져오기</button>
+        <button type="button" class="btn ghost" id="btnShowKey">키 보기</button>
+      </div>
+      <p>붙여넣기가 안 되면: 쓰기 화면의 노트에 키를 붙여넣고 '노트에 붙여넣은 키 가져오기'를 누르세요. 키는 노트에서 바로 지워져요.</p>
+    </div>
+    <label>모델
+      <select id="model">
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · 빠르고 정확 (기본)</option>
+        <option value="claude-opus-5-5">Claude Opus 5.5 · 가장 정확</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 · 가장 빠르고 저렴</option>
+      </select>
+    </label>
+    <label>정리 꼼꼼함
+      <select id="effort">
+        <option value="high">높음 · 꼼꼼하게 (기본)</option>
+        <option value="medium">보통</option>
+        <option value="low">낮음 · 빠르고 저렴하게</option>
+      </select>
+    </label>
+    <div class="row"><button type="button" class="btn" id="btnTestKey">연결 테스트</button><span id="keyMsg"></span></div>
+    <div class="sep"></div>
+    <div>
+      <h3>구글 캘린더 연결</h3>
+      <p>연결하면 구글 캘린더(그룹웨어에서 동기화된 일정 포함)가 일정 탭에 함께 보이고, 정리한 일정은 구글 캘린더에 자동으로 들어가요. 같은 일정은 하나로 합쳐 보여 줘요. 캘린더 일정은 Claude에게 보내지 않아요.</p>
+    </div>
+    <label>구글 OAuth 클라이언트 ID
+      <input type="text" id="gClientId" placeholder="숫자-영문.apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <div id="gcalBox" style="display:grid;gap:8px"></div>
+    <div class="sep"></div>
+    <div>
+      <h3>정리 신호</h3>
+      <p>마지막 줄에 <code>//</code> 또는 <code>@정리</code> 만 쓰고 잠깐 멈추면 자동으로 정리돼요. 키보드가 있으면 <code>Ctrl</code>+<code>Enter</code>. 인터넷이 없을 때 신호를 주면 '정리 대기'로 표시했다가 연결되면 정리합니다.</p>
+    </div>
+    <div class="sep"></div>
+    <div>
+      <h3>회의록 · 업무</h3>
+      <p>노트는 달마다 새로 시작해요. 달이 바뀌면 안 끝난 일을 새 달 노트로 넘기고, 지난달 업무를 Claude가 요약해 업무 탭에 보여 줘요.</p>
+    </div>
+    <label class="chkrow" for="setAutoMin"><input type="checkbox" id="setAutoMin"> 녹취 글을 공유받으면 회의록을 자동으로 만들기</label>
+    <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치는 업무 할 일로, 결정사항은 중요 메모로 넣기</label>
+    <div class="sep"></div>
+    <div>
+      <h3>업무보드 연결</h3>
+      <p>끄적노트의 할 일을 공공보건의료사업팀 업무보드 '업무 목록'에 올리고, 보드에서 바뀐 상태와 내 담당 업무를 받아 와요. 연결 키는 업무보드에서 받아 여기에 붙여넣어요(채팅에는 붙여넣지 마세요).</p>
+    </div>
+    <label>업무보드 주소<input type="text" id="boardUrl" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div style="display:grid;gap:6px">
+      <label for="boardKey">연결 키</label>
+      <input type="text" id="boardKey" class="masked" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="업무보드에서 받은 끄적노트 연결 키">
+    </div>
+    <label>담당 (보드에 표시할 내 이름)<input type="text" id="boardOwner" maxlength="40" autocomplete="off"></label>
+    <label class="chkrow" for="boardAuto"><input type="checkbox" id="boardAuto"> 올린 업무의 상태·기한이 바뀌면 보드에도 맞추기</label>
+    <label class="chkrow" for="boardPull"><input type="checkbox" id="boardPull"> 보드에서 바뀐 상태를 받고, 내 담당 업무(담당에 내 이름이 있는 업무)를 가져오기</label>
+    <div class="row"><button type="button" class="btn" id="btnBoardPaste">키 붙여넣기</button><button type="button" class="btn" id="btnBoardTest">연결 테스트</button><span id="boardMsg"></span></div>
+    <div class="sep"></div>
+    <div>
+      <h3>노트 관리 · 백업</h3>
+      <p>노트는 이 기기 브라우저 저장소에만 있어요. 가끔 백업 파일을 받아 두세요.</p>
+    </div>
+    <div class="row">
+      <button type="button" class="btn" id="btnExport">백업 파일 받기</button>
+      <button type="button" class="btn" id="btnImport">백업 불러오기</button>
+      <button type="button" class="btn danger" id="btnDelNote">지금 노트 삭제</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+    <div class="row" style="justify-content:flex-end"><button class="btn primary" value="close">닫기</button></div>
+  </form>
+</dialog>
+
+<script src="store.js"></script>
+<script src="ink.js"></script>
+<script src="claude.js"></script>
+<script src="ui.js"></script>
+<script src="views.js"></script>
+<script src="gcal.js"></script>
+<script src="work.js"></script>
+<script src="board.js"></script>
+<script src="app.js"></script>
+<script src="daily.js"></script>
+<script src="docs.js"></script>
+<script src="edit.js"></script>
+<script src="attach.js"></script>
+<script src="ask.js"></script>
+<script src="voice.js"></script>
+<script src="hwpx-tpl.js"></script>
+<script src="docgen.js"></script>
+<script src="minutes.js"></script>
+<script src="search.js"></script>
+</body>
+</html>

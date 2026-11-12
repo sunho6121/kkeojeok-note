@@ -1,0 +1,15 @@
+{
+ "version": "kk-v23",
+ "docs": [
+  {
+   "file": "docs/1.md",
+   "title": "사용안내",
+   "name": "01_사용안내.md"
+  },
+  {
+   "file": "docs/2.md",
+   "title": "작업내역",
+   "name": "02_작업내역.md"
+  }
+ ]
+}

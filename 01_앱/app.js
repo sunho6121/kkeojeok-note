@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, recWith: 'app', boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -496,7 +496,7 @@
   const dlg = $('dlgSettings');
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
-    $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false; $('setRecWith').value = settings.recWith === 'web' ? 'web' : 'app';
+    $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false;
     $('boardUrl').value = settings.boardUrl || (KK.board ? KK.board.DEFAULT_URL : ''); $('boardKey').value = settings.boardKey || ''; $('boardOwner').value = settings.boardOwner || '';
     $('boardAuto').checked = settings.boardAuto !== false; $('boardPull').checked = settings.boardPull !== false; $('boardMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
@@ -505,7 +505,7 @@
   }
   function readSettingsForm() {
     settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
-    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.recWith = $('setRecWith').value;
+    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked;
     settings.boardUrl = $('boardUrl').value.trim(); settings.boardKey = $('boardKey').value.replace(/\s+/g, ''); settings.boardOwner = $('boardOwner').value.trim(); settings.boardAuto = $('boardAuto').checked; settings.boardPull = $('boardPull').checked;
     saveSettings();
   }

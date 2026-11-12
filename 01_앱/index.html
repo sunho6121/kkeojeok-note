@@ -270,6 +270,14 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .rqtext{display:grid;gap:8px;font-size:14.5px;color:var(--ink);margin:0}
 .rqtext p{margin:0;color:var(--ink)}
 .rqtext ol,ol.rqtext{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14.5px}
+.rqpick{display:grid;gap:10px}
+.rqopt{display:grid;gap:4px;width:100%;min-height:64px;padding:14px 16px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--sheet);color:var(--ink)}
+.rqopt b{font-size:16px}
+.rqopt span{font-size:13.5px;line-height:1.5;color:var(--muted)}
+.rqopt:hover,.rqopt:focus-visible{border-color:var(--accent);background:var(--accent-soft)}
+.rqhelp{font-size:13.5px;color:var(--muted)}
+.rqhelp summary{cursor:pointer;color:var(--accent);font-weight:600;min-height:34px;display:flex;align-items:center}
+.rqhelp ul{margin:2px 0 0;padding-left:18px;display:grid;gap:4px}
 .recpill{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-family:var(--f-mono);font-size:13px;font-weight:600;white-space:nowrap}
 .recpill .recdot{display:inline-block}
 body[data-view="write"] .recpill{display:none}
@@ -847,11 +855,21 @@ body[data-view="write"] .recpill{display:none}
 
 <dialog id="dlgRecStart" aria-labelledby="rqHead">
   <form method="dialog" class="dlg" onsubmit="return false">
-    <h2 id="rqHead">녹음을 시작할까요?</h2>
-    <div id="rqText" class="rqtext"></div>
+    <h2 id="rqHead">어떻게 녹음할까요?</h2>
+    <div class="rqpick">
+      <button type="button" class="rqopt" id="rqWeb"><b>끄적노트로 녹음</b><span>바로 녹음 시작 · 파일은 끄적노트 녹음 탭에 저장<br>노트를 쓰거나 다른 탭을 봐도 계속 녹음 · 녹음 버튼이나 위쪽 ●를 누르면 끝남 · 앱을 닫으면 멈춤</span></button>
+      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음<br>노트에 시작 표시 → 음성 녹음 앱을 직접 열어 녹음 → 끝나면 공유 → 끄적노트</span></button>
+    </div>
+    <details class="rqhelp" id="rqHelp">
+      <summary>음성 녹음 앱이 저절로 열리지 않는 이유 · 빨리 여는 법</summary>
+      <ul>
+        <li>끄적노트 같은 웹앱은 보안 규칙상 다른 앱을 열거나 그 앱의 녹음을 시작할 수 없어요</li>
+        <li>화면 아래 작업 표시줄의 음성 녹음 아이콘을 화면 오른쪽 끝으로 끌어 놓으면 화면 분할로 열려요</li>
+        <li>화면 분할로 두 앱을 연 뒤 가운데 막대의 메뉴에서 '앱 페어'로 저장해 두면, 다음부터 한 번 눌러 두 앱을 나란히 열 수 있어요 (메뉴 이름은 기기마다 조금 다를 수 있어요)</li>
+      </ul>
+    </details>
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn ghost" id="rqCancel">취소</button>
-      <button type="button" class="btn primary" id="rqGo">녹음 시작</button>
     </div>
   </form>
 </dialog>
@@ -943,12 +961,6 @@ body[data-view="write"] .recpill{display:none}
     </div>
     <label class="chkrow" for="setAutoMin"><input type="checkbox" id="setAutoMin"> 녹취 글을 공유받으면 회의록을 자동으로 만들기</label>
     <label class="chkrow" for="setMinTasks"><input type="checkbox" id="setMinTasks"> 회의록의 향후조치는 업무 할 일로, 결정사항은 중요 메모로 넣기</label>
-    <label>녹음 버튼을 누르면
-      <select id="setRecWith">
-        <option value="app">음성 녹음 앱으로 녹음 (추천 · 녹음은 그 앱에 저장, 그동안 끄적노트 사용)</option>
-        <option value="web">끄적노트 안에서 녹음 (짧은 메모용 · 음성 녹음 앱에는 저장 안 됨)</option>
-      </select>
-    </label>
     <div class="sep"></div>
     <div>
       <h3>업무보드 연결</h3>

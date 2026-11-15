@@ -187,7 +187,35 @@
     if (document.body.dataset.view === 'rec') renderList(list);
   }
 
-  let urls = [], recQ = '';
+  let urls = [], recQ = '', recPer = 'all', selMode = false, focusId = null;
+  const sel = new Set();
+  const PERIODS = [['all', '전체'], ['today', '오늘'], ['week', '이번 주'], ['month', '이번 달']];
+  const startOf = r => r.startAt || r.createdAt;
+  function inPeriod(r, p) {
+    if (p === 'all') return true;
+    const t = startOf(r), now = new Date(), d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (p === 'today') return t >= d0.getTime();
+    if (p === 'week') return t >= D.addDays(d0, -((d0.getDay() + 6) % 7)).getTime(); // 월요일부터
+    return t >= new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  }
+  /* 찾기: 이름·노트·회의록(회의명·장소·참석자)·날짜(11/12, 11월 12일)는 바로, 녹취 글·메모·회의록 내용은 찾은 줄을 함께 보여 줌 */
+  function matchRec(r, ql) {
+    const S = A().S, V = KK.views, m = r.minutes || {}, mm = r.mmeta || {};
+    const d = new Date(startOf(r)), mo = d.getMonth() + 1, da = d.getDate();
+    const head = [r.name || defaultName(r.createdAt), V.noteLabel(S.notes.get(r.noteId)), m.title, m.place, m.attendees, mm.title, mm.place, mm.attendees,
+      mo + '/' + da, mo + '월 ' + da + '일', D.ymd(d)].filter(Boolean).join(' · ').toLowerCase();
+    if (head.includes(ql)) return { where: '' };
+    let mText = '';
+    try { mText = r.minutes && KK.docgen ? KK.docgen.text(r.minutes) : ''; } catch (e) { mText = ''; }
+    for (const [where, txt] of [['녹취 글', r.text], ['메모', r.memo], ['회의록', mText]]) {
+      const s = String(txt || ''), i = s.toLowerCase().indexOf(ql);
+      if (i < 0) continue;
+      const ls = s.lastIndexOf('\n', i) + 1, le0 = s.indexOf('\n', i), le = le0 < 0 ? s.length : le0;
+      const a = Math.max(ls, i - 30), b = Math.min(le, i + ql.length + 50);
+      return { where, pre: (a > ls ? '…' : '') + s.slice(a, i), hit: s.slice(i, i + ql.length), post: s.slice(i + ql.length, b) + (b < le ? '…' : '') };
+    }
+    return null;
+  }
   async function renderList(given) {
     urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
     const S = A().S, V = KK.views;
@@ -196,14 +224,26 @@
     const total = list.reduce((s, r) => s + (r.size || (r.blob && r.blob.size) || 0), 0);
     const filterNote = S.recNote && S.notes.get(S.recNote);
     const head = h('div', { class: 'rhead' },
-      h('input', { class: 'search', id: 'recSearch', type: 'search', placeholder: '녹음 이름·노트·회의록 제목으로 찾기', value: recQ, oninput: e => { recQ = e.target.value; renderList(list); setTimeout(() => { const s = $('recSearch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }, 0); } }),
+      h('input', { class: 'search', id: 'recSearch', type: 'search', placeholder: '이름·날짜·노트·회의록·녹취 글로 찾기', value: recQ, oninput: e => { recQ = e.target.value; renderList(list); setTimeout(() => { const s = $('recSearch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }, 0); } }),
       h('span', { class: 'when' }, '녹음 ' + list.filter(r => !r.draft).length + '개 · ' + fmtSize(total)));
-    box.append(head);
+    const tools = h('div', { class: 'rtools' },
+      h('div', { class: 'seg', role: 'group', 'aria-label': '기간' }, PERIODS.map(([k, l]) =>
+        h('button', { type: 'button', 'aria-pressed': String(recPer === k), onclick: () => { recPer = k; renderList(list); } }, l))),
+      h('span', { class: 'when', id: 'recFound' }),
+      h('button', { type: 'button', class: 'btn' + (selMode ? ' primary' : ''), id: 'recSelMode', onclick: () => { selMode = !selMode; sel.clear(); renderList(list); } }, selMode ? '고르기 끝' : '여러 개 골라 보내기'));
+    box.append(head, tools);
     if (filterNote) box.append(h('div', { class: 'rfilter' }, '「' + V.noteLabel(filterNote) + '」 노트의 녹음만 보는 중',
       h('button', { class: 'linkbtn', onclick: () => { S.recNote = null; renderList(list); } }, '전체 보기')));
-    const q = recQ.trim().toLowerCase();
-    const shown = list.filter(r => (!filterNote || r.noteId === S.recNote) &&
-      (!q || [r.name, V.noteLabel(S.notes.get(r.noteId)), r.minutes && r.minutes.title].join(' ').toLowerCase().includes(q)));
+    const ql = recQ.trim().toLowerCase(), hits = new Map();
+    const shown = list.filter(r => {
+      if (filterNote && r.noteId !== S.recNote) return false;
+      if (!inPeriod(r, recPer)) return false;
+      if (!ql) return true;
+      const mt = matchRec(r, ql);
+      if (mt) hits.set(r.id, mt);
+      return !!mt;
+    });
+    if (ql || recPer !== 'all') $('recFound').textContent = '찾은 녹음 ' + shown.length + '개';
     if (!shown.length) {
       box.append(h('div', { class: 'empty' },
         h('p', null, list.length ? '조건에 맞는 녹음이 없어요.' : '아직 녹음이 없어요.'),
@@ -219,18 +259,45 @@
         box.append(h('h3', { class: 'rday' }, D.dayLabel(day)));
         ul = h('ul', { class: 'reclist' }); box.append(ul);
       }
-      ul.append(card(r, list));
+      ul.append(card(r, list, hits.get(r.id)));
     });
+    if (selMode) box.append(selBar(list));
+    if (focusId) {
+      const li = box.querySelector('[data-id="' + CSS.escape(focusId) + '"]');
+      focusId = null;
+      if (li) { li.classList.add('flash'); setTimeout(() => li.scrollIntoView({ block: 'center' }), 60); }
+    }
+  }
+  function selBar(list) {
+    const picked = list.filter(r => sel.has(r.id));
+    const size = picked.reduce((s, r) => s + (r.blob ? (r.size || r.blob.size || 0) : 0), 0);
+    return h('div', { class: 'rselbar', id: 'recSelBar' },
+      h('span', null, picked.length ? picked.length + '개 고름 · ' + fmtSize(size) : '보낼 녹음을 골라 주세요'),
+      h('button', { type: 'button', class: 'btn primary', disabled: !picked.length, onclick: () => KK.recshare.open(picked) }, '보내기'));
+  }
+  // 다른 화면(위쪽 검색 등)에서 녹음 하나로 바로 가기
+  function show(id, q) {
+    recQ = q || ''; recPer = 'all'; selMode = false; sel.clear(); focusId = id;
+    A().S.recNote = null;
+    if (document.body.dataset.view === 'rec') renderList(); else A().setView('rec');
+  }
+  async function search(q) {
+    const ql = String(q || '').trim().toLowerCase();
+    if (!ql) return [];
+    return (await allRecs()).filter(r => !r.draft).map(r => ({ r, mt: matchRec(r, ql) })).filter(x => x.mt);
   }
 
-  function card(r, list) {
+  function card(r, list, mt) {
     const S = A().S, V = KK.views;
     const n = S.notes.get(r.noteId);
     const t = new Date(r.createdAt);
-    const ext = /mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm';
-    const fileName = (r.name || defaultName(r.createdAt)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
-    const li = h('li', { class: 'rcard' + (r.draft ? ' draft' : '') });
-    const title = h('div', { class: 'rtitle' }, h('b', null, r.name || defaultName(r.createdAt)),
+    const li = h('li', { class: 'rcard' + (r.draft ? ' draft' : ''), 'data-id': r.id });
+    const title = h('div', { class: 'rtitle' },
+      selMode && !r.draft ? h('input', { type: 'checkbox', class: 'rsel', checked: sel.has(r.id), 'aria-label': '「' + (r.name || '녹음') + '」 보내기에 고르기', onchange: e => {
+        if (e.target.checked) sel.add(r.id); else sel.delete(r.id);
+        const bar = $('recSelBar'); if (bar) bar.replaceWith(selBar(list));
+      } }) : null,
+      h('b', null, r.name || defaultName(r.createdAt)),
       r.draft ? h('span', { class: 'chip new' }, '저장 확인 안 됨') : null,
       !r.draft && r.minutes ? h('span', { class: 'chip' }, '회의록') : null,
       !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
@@ -240,6 +307,7 @@
     const meta = h('div', { class: 'it-m' },
       h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + (r.blob ? ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || r.blob.size || 0) : ' · 녹취 글')),
       n ? h('button', { class: 'linkbtn', style: 'margin-left:0;min-height:28px', onclick: () => { A().openNote(n.id); A().setView('write'); } }, '노트: ' + V.noteLabel(n)) : h('span', null, '노트 없음'));
+    const hit = mt && mt.where ? h('div', { class: 'rhit' }, mt.where + ': ' + mt.pre, h('mark', null, mt.hit), mt.post) : null;
     const player = h('div', { class: 'rplayer' });
     const playBtn = h('button', { type: 'button', class: 'btn primary', onclick: () => {
       const url = URL.createObjectURL(r.blob); urls.push(url);
@@ -254,16 +322,15 @@
         h('button', { type: 'button', class: 'btn', onclick: () => askSave(r) }, '저장할지 정하기'));
     } else {
       acts.append(...[
+        h('button', { type: 'button', class: 'btn', onclick: () => KK.recshare.open([r]) }, svg('<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M7 8l5-5 5 5"/>'), '보내기'),
         h('button', { type: 'button', class: 'btn', onclick: () => KK.minutes.open(r) }, svg(ICON.note), r.minutes ? '회의록 보기' : '회의록 만들기'),
         h('button', { type: 'button', class: 'btn', onclick: () => rename(li, r, list) }, '이름 바꾸기'),
-        r.blob ? h('button', { type: 'button', class: 'btn', onclick: () => shareRec(r, fileName) }, '공유') : null,
-        r.blob ? h('button', { type: 'button', class: 'btn', onclick: () => download(r, fileName) }, '파일로 받기') : null,
         h('button', { type: 'button', class: 'btn danger', onclick: async () => {
-          await db.del(r.id); await refresh(); renderList();
+          await db.del(r.id); sel.delete(r.id); await refresh(); renderList();
           toast('「' + (r.name || '녹음') + '」을(를) 지웠어요', '되돌리기', async () => { await db.putRaw(r); await refresh(); renderList(); });
-        } }, '삭제')].filter(Boolean));
+        } }, '삭제')]);
     }
-    li.append(title, meta, player, acts);
+    li.append(...[title, meta, hit, player, acts].filter(Boolean));
     return li;
   }
 
@@ -277,26 +344,6 @@
       h('button', { type: 'button', class: 'btn ghost', onclick: () => renderList(list) }, '취소'));
     li.querySelector('.rtitle').replaceWith(row);
     input.focus(); input.select();
-  }
-
-  /* 다른 앱으로 보내기 (카톡·드라이브·삼성 노트 등). 공유가 안 되는 기기면 파일로 받는다 */
-  async function shareRec(r, fileName) {
-    const type = /mp4/.test(r.mime || '') ? 'audio/mp4' : String(r.blob.type || r.mime || 'audio/webm').split(';')[0];
-    const file = new File([r.blob], fileName, { type });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: r.name || '녹음' }); }
-      catch (e) { if (e.name !== 'AbortError') download(r, fileName); }
-    } else {
-      download(r, fileName);
-      toast('이 기기에서는 바로 공유가 안 돼서 다운로드 폴더에 저장했어요. 다른 앱에서 그 파일을 열어 주세요.', null, null, 7000);
-    }
-  }
-  function download(r, fileName) {
-    const url = URL.createObjectURL(r.blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = fileName; document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast('「' + fileName + '」을(를) 다운로드 폴더에 저장했어요');
   }
 
   /* ---------- 버튼 연결 ---------- */
@@ -401,7 +448,7 @@
   $('btnRecord').dataset.title = isAndroid ? '녹음 (끄적노트로 녹음 또는 음성 녹음 앱으로 녹음)' : '소리를 녹음해 이 노트에 저장';
   $('btnRecord').title = $('btnRecord').dataset.title;
   tick(); // 앱을 다시 열었을 때 음성 녹음 앱 녹음 중 표시를 이어서
-  KK.voice = { refresh, renderList, isAndroid, recTarget, endMark, getMark, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
+  KK.voice = { refresh, renderList, show, search, isAndroid, recTarget, endMark, getMark, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
 
   // 시작할 때: 저장 여부를 정하지 않은 녹음이 있으면 알려 준다
   refresh().then(async () => {

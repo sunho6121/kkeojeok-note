@@ -104,6 +104,22 @@ body[data-view="write"] #vWrite,body[data-view="work"] #vWork,body[data-view="sc
 .rcard.draft{border-color:var(--mark);box-shadow:0 0 0 1px var(--mark)}
 .rtitle{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:16px}
 .rplayer audio{width:100%}
+.rtools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.rtools #recSelMode{margin-left:auto;min-height:40px}
+.rhit{font-size:13.5px;color:var(--muted);overflow-wrap:anywhere}
+.rhit mark{background:var(--mark);color:var(--mark-ink);border-radius:3px;padding:0 1px}
+.rsel{width:22px;height:22px;flex:none;margin:0}
+.rselbar{position:sticky;bottom:12px;z-index:2;display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--sheet);border:1px solid var(--accent);border-radius:12px;padding:8px 8px 8px 14px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:14.5px}
+.rcard.flash{animation:rflash 2s ease-out 1}
+@keyframes rflash{0%,45%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+#dlgShare{width:min(560px,calc(100vw - 32px))}
+#shItems{display:grid;gap:0}
+#shItems .chkrow.off{color:var(--muted)}
+#shItems small{font-size:12.5px;color:var(--muted);font-weight:400}
+.dlg textarea#shBody{width:100%;min-height:110px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:10px 12px;font-size:14.5px;line-height:1.55;resize:vertical;color:var(--ink);font-weight:400}
+.shsum{margin:0;font-size:14px;color:var(--muted)}
+.shwarn{margin:0;font-size:13.5px;color:var(--danger);background:var(--danger-soft);border-radius:10px;padding:8px 12px}
+.shnote{margin:0;font-size:13px;color:var(--muted)}
 .rcard .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start}
 
 /* 공통 */
@@ -667,7 +683,7 @@ body[data-view="write"] .recpill{display:none}
       <div><b>긴 회의 녹음은 삼성 '음성 녹음' 앱을 추천해요.</b> 화면을 꺼도 계속 녹음되고, Galaxy AI 텍스트 변환으로 글로 바꿀 수 있어요.</div>
       <div>음성 녹음 앱에서 변환한 글(녹음 파일과 함께 또는 따로)을 <b>공유 → 끄적노트</b>로 보내면, 여기 녹음에 묶이고 <b>회의록이 자동으로 만들어져요</b>. 향후조치는 <b>업무 탭 할 일</b>로 들어가요.</div>
       <div>회의록은 녹음 카드의 <b>회의록 보기</b>에서 고쳐 쓰고 한글·Word·PDF로 받을 수 있어요. 끄적노트의 녹음 버튼도 녹음은 되지만, 글로 바꾸는 기능은 없어서 회의록에는 녹음 중 쓴 메모만 들어가요.</div>
-      <div>끄적노트 녹음은 <b>앱 안에 저장</b>돼서 다른 앱에는 보이지 않아요. 다른 앱에서 쓰려면 녹음 카드의 <b>공유</b>나 <b>파일로 받기</b>(다운로드 폴더)를 쓰세요.</div>
+      <div>끄적노트 녹음은 <b>앱 안에 저장</b>돼서 다른 앱에는 보이지 않아요. 메일·카카오톡 등으로 보내려면 녹음 카드의 <b>보내기</b>를 누르세요. 여러 개는 <b>여러 개 골라 보내기</b>.</div>
     </div>
     <div id="recView" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
@@ -696,8 +712,8 @@ body[data-view="write"] .recpill{display:none}
 
 <dialog id="dlgSearch">
   <form method="dialog" class="dlg" onsubmit="return false">
-    <h2>메모 검색</h2>
-    <input class="sbox" id="searchQ" type="search" placeholder="찾을 말 (모든 노트의 내용에서 찾아요)" autocomplete="off">
+    <h2>검색</h2>
+    <input class="sbox" id="searchQ" type="search" placeholder="찾을 말 (모든 노트와 녹음에서 찾아요)" autocomplete="off">
     <div class="sres" id="searchResults"></div>
     <div class="row" style="justify-content:flex-end"><button class="btn primary" type="button" id="btnSearchClose">닫기</button></div>
   </form>
@@ -748,6 +764,7 @@ body[data-view="write"] .recpill{display:none}
         <button type="button" class="btn primary" data-fmt="hwpx">한글 (HWPX)</button>
         <button type="button" class="btn primary" data-fmt="docx">Word (DOCX)</button>
         <button type="button" class="btn primary" data-fmt="pdf">PDF</button>
+        <button type="button" class="btn" id="mShare">보내기 (메일·카톡)</button>
       </div>
       <p class="mmsg" id="mDlMsg"></p>
     </section>
@@ -890,6 +907,24 @@ body[data-view="write"] .recpill{display:none}
   </form>
 </dialog>
 
+<dialog id="dlgShare" aria-labelledby="shHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="shHead">녹음 보내기</h2>
+    <div id="shItems"></div>
+    <label>메일 제목 <input type="text" id="shSubj" autocomplete="off"></label>
+    <label>내용 <textarea id="shBody" rows="5"></textarea></label>
+    <p class="shsum" id="shSum"></p>
+    <p class="shwarn" id="shWarn" hidden></p>
+    <p class="shnote" id="shNoShare" hidden>이 기기는 공유 창을 쓸 수 없어요. 파일로 받은 뒤 메일에 직접 첨부해 주세요.</p>
+    <p class="shnote">보내기를 누르면 공유 창이 열려요. Gmail·삼성 이메일·카카오톡·드라이브 등을 고르세요. 메일 앱에 따라 제목·내용이 자동으로 안 들어갈 수 있어요.</p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="shCancel">취소</button>
+      <button type="button" class="btn" id="shDl">파일로 받기</button>
+      <button type="button" class="btn primary" id="shGo">보내기</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgRecSave">
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2>녹음을 저장할까요?</h2>
@@ -1008,6 +1043,7 @@ body[data-view="write"] .recpill{display:none}
 <script src="hwpx-tpl.js"></script>
 <script src="docgen.js"></script>
 <script src="minutes.js"></script>
+<script src="recshare.js"></script>
 <script src="search.js"></script>
 </body>
 </html>

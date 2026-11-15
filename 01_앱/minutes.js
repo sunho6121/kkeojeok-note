@@ -383,6 +383,11 @@
     }
   }
   $('dlgMinutes').querySelectorAll('[data-fmt]').forEach(b => b.addEventListener('click', () => download(b.dataset.fmt)));
+  $('mShare').addEventListener('click', () => {
+    if (!model || !rec) return;
+    applyEdit(); renderOut(); flushSave(); // 고친 회의명·일시 등을 먼저 저장하고 보낸다
+    KK.recshare.open([rec], { minutes: true });
+  });
 
   KK.minutes = { open, noteBlocks, whenOf, auto, resume, isRunning };
 })();

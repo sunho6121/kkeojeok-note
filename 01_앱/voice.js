@@ -71,6 +71,59 @@
 
   /* ---------- 녹음 ---------- */
   let mr = null, chunks = [], recording = false, t0 = 0, timer = null, wake = null, stream = null, recNote = null, recFrom = 0;
+  /* 끊김 대비 (kk-v25) — 탭 커버를 닫는 등 화면이 꺼지면 Chrome이 마이크를 끊거나 앱을 닫을 수 있다.
+     ① 10초마다 녹음 조각(kind 'recpart')을 저장해 두고, 앱이 닫혔다 다시 열리면 이어 붙여 살린다(recover).
+     ② 화면이 꺼졌던 때(gaps)를 기억해 알려 주고, 마이크가 끊겼으면 그때까지를 저장하고 이어서 녹음하게 한다.
+     ③ 화면이 다시 켜지면 화면 켜 두기(wake lock)를 다시 건다(화면이 꺼지면 저절로 풀림).
+     다른 창에서 녹음 중인 조각을 건드리지 않게 녹음하는 동안 Web Locks('kk-rec-<id>')를 쥐고 있다. */
+  const PART_MS = 10000, GAP_WARN = 30000;
+  let recId = null, pend = [], seq = 0, lastPart = 0, partNow = false, partP = Promise.resolve(), unlock = null;
+  let offAt = 0, muteAt = 0, gaps = [], cutAt = 0, lastData = 0;
+  const ago = s => (s < 60 ? s + '초' : Math.round(s / 60) + '분');
+  function savePart() {
+    lastPart = Date.now();
+    if (!recId || !pend.length || !mr) return partP;
+    const type = mr.mimeType || 'audio/webm';
+    const part = { id: 'rp-' + recId + '-' + String(seq).padStart(5, '0'), kind: 'recpart', recId, seq: seq++, noteId: recNote, t0, recFrom, mime: type, at: lastData || Date.now(), gaps: gaps.slice(), blob: new Blob(pend, { type }) };
+    pend = [];
+    partP = partP.then(() => db.putRaw(part)).catch(() => { /* 저장 공간 부족 등: 끝날 때 한꺼번에 저장은 그대로 */ });
+    return partP;
+  }
+  async function dropParts(id) {
+    try {
+      const ids = (await db.all()).filter(d => d.kind === 'recpart' && d.recId === id).map(d => d.id);
+      if (ids.length) await db.delMany(ids);
+    } catch (e) { /* 무시: 다음에 열 때 정리 */ }
+  }
+  function addGap(a, b) { if (b - a >= 3000) gaps.push({ at: a, sec: Math.round((b - a) / 1000) }); }
+  // 화면 꺼짐·마이크 멈춤이 겹친 구간은 합쳐서 센다
+  function gapSum(list) {
+    const s = (list || []).map(g => [g.at, g.at + g.sec * 1000]).sort((x, y) => x[0] - y[0]);
+    let n = 0, tot = 0, cs = 0, ce = -1;
+    for (const [a, b] of s) {
+      if (a > ce) { if (ce >= 0) { n++; tot += ce - cs; } cs = a; ce = b; } else ce = Math.max(ce, b);
+    }
+    if (ce >= 0) { n++; tot += ce - cs; }
+    return { n, sec: Math.round(tot / 1000) };
+  }
+  function memoOf(noteId, from) {
+    const n = A().S.notes.get(noteId), body = (n && n.body) || '';
+    if (body.length <= (from || 0)) return '';
+    return body.slice(from || 0).split('\n').filter(l => !/^\s*(\/\/|@정리|정리!!)\s*$/.test(l)).join('\n').trim();
+  }
+  async function wakeOn() {
+    try {
+      if (!navigator.wakeLock || document.visibilityState !== 'visible' || (wake && !wake.released)) return;
+      const w = await navigator.wakeLock.request('screen');
+      if (recording) wake = w; else w.release();
+    } catch (e) { /* 무시 */ }
+  }
+  // 마이크·녹음기가 저절로 멈춤 → 그때까지를 저장하게
+  function cutNow() {
+    if (!recording) return;
+    cutAt = lastData || Date.now();
+    stopRecording();
+  }
   async function startRecording() {
     if (db.usingFallback) { toast('이 브라우저에서는 녹음을 저장할 수 없어요.'); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { toast('이 브라우저는 녹음을 지원하지 않아요.'); return; }
@@ -81,15 +134,29 @@
     const mime = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m)) || '';
     try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
     catch (e) { stream.getTracks().forEach(t => t.stop()); toast('녹음을 시작하지 못했어요.'); return; }
-    chunks = [];
-    mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    mr.onstop = finishRecording;
+    chunks = []; pend = []; seq = 0; gaps = []; cutAt = 0; offAt = 0; muteAt = 0; lastData = 0; partNow = false;
+    recId = KK.uid(); lastPart = Date.now();
+    mr.ondataavailable = e => {
+      if (!e.data || !e.data.size) return;
+      chunks.push(e.data); pend.push(e.data); lastData = Date.now();
+      if (partNow || Date.now() - lastPart >= PART_MS) { partNow = false; savePart(); }
+    };
+    // 끝내기를 누르지 않았는데 멈췄으면(마이크가 끊김 등) 끊긴 녹음으로 저장하게
+    mr.onstop = () => { if (recording) { cutAt = lastData || Date.now(); stopRecording(); } finishRecording(); };
+    const tr = stream.getAudioTracks()[0];
+    if (tr) {
+      tr.addEventListener('ended', () => cutNow());
+      tr.addEventListener('mute', () => { if (recording && !muteAt) muteAt = Date.now(); });
+      tr.addEventListener('unmute', () => { if (muteAt) { addGap(muteAt, Date.now()); muteAt = 0; } });
+    }
+    if (navigator.locks && navigator.locks.request) navigator.locks.request('kk-rec-' + recId, () => new Promise(res => { unlock = res; })).catch(() => {});
     const startNote = A().ensureNote();
     recNote = startNote.id;
     recFrom = (startNote.body || '').length; // 녹음하는 동안 쓴 메모를 회의록 만들 때 함께 쓰려고
     mr.start(1000); recording = true; t0 = Date.now();
-    toast('녹음을 시작했어요. 녹음 버튼이나 위쪽 ●를 누르면 끝나요', null, null, 5000);
-    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; }
+    toast(isAndroid ? '녹음을 시작했어요. 화면을 켜 둔 채로 두세요(탭 커버를 닫으면 멈출 수 있어요). 끝낼 때는 녹음 버튼이나 위쪽 ●'
+      : '녹음을 시작했어요. 녹음 버튼이나 위쪽 ●를 누르면 끝나요', null, null, isAndroid ? 7000 : 5000);
+    await wakeOn();
     recMark(true); tick();
     timer = setInterval(() => recMark(true), 1000);
   }
@@ -114,17 +181,75 @@
   /* 끝나면 먼저 '임시 녹음'으로 보관하고(앱이 꺼져도 잃지 않게) 저장할지 묻는다 */
   async function finishRecording() {
     const type = (mr && mr.mimeType) || 'audio/webm';
-    const blob = new Blob(chunks, { type }); chunks = [];
-    const dur = Math.max(1, Math.round((Date.now() - t0) / 1000));
-    if (!blob.size) { toast('녹음된 소리가 없어요.'); return; }
-    const doc = { id: 'rec-' + KK.uid(), kind: 'rec', noteId: recNote, createdAt: t0, duration: dur, mime: type, size: blob.size, name: defaultName(t0), draft: true, blob };
-    const n = A().S.notes.get(recNote), body = (n && n.body) || '';
-    if (body.length > recFrom) {
-      const memo = body.slice(recFrom).split('\n').filter(l => !/^\s*(\/\/|@정리|정리!!)\s*$/.test(l)).join('\n').trim();
-      if (memo) doc.memo = memo;
-    }
-    try { await db.putRaw(doc); } catch (e) { toast('녹음을 보관하지 못했어요. 저장 공간을 확인해 주세요.'); return; }
+    const blob = new Blob(chunks, { type }); chunks = []; pend = [];
+    const id = recId; recId = null; // 이제 조각 저장 안 함
+    if (unlock) { unlock(); unlock = null; }
+    const end = cutAt || Date.now();
+    if (offAt) { addGap(offAt, end); offAt = 0; }
+    if (muteAt) { addGap(muteAt, end); muteAt = 0; }
+    if (cutAt) gaps = gaps.map(g => ({ at: g.at, sec: Math.min(g.sec, Math.round((end - g.at) / 1000)) })).filter(g => g.sec >= 3); // 끊긴 뒤는 녹음에 없음
+    const dur = Math.max(1, Math.round((end - t0) / 1000));
+    await partP;
+    if (!blob.size) { await dropParts(id); toast('녹음된 소리가 없어요.'); return; }
+    const doc = { id: 'rec-' + id, kind: 'rec', noteId: recNote, createdAt: t0, duration: dur, mime: type, size: blob.size, name: defaultName(t0), draft: true, blob };
+    if (gaps.length) doc.gaps = gaps.slice();
+    if (cutAt) { doc.cut = 'stop'; doc.cutAt = cutAt; }
+    const memo = memoOf(recNote, recFrom);
+    if (memo) doc.memo = memo;
+    try { await db.putRaw(doc); } catch (e) { toast('녹음을 보관하지 못했어요. 저장 공간을 확인해 주세요.'); return; } // 조각은 남겨 다음에 열 때 살림
+    await dropParts(id);
     askSave(doc);
+  }
+
+  /* 화면이 꺼지면(탭 커버·전원 버튼·다른 앱) 지금까지를 바로 조각으로 저장, 다시 켜지면 확인 */
+  document.addEventListener('visibilitychange', () => {
+    if (!recording) return;
+    if (document.visibilityState === 'hidden') {
+      offAt = Date.now();
+      savePart(); partNow = true;
+      try { mr.requestData(); } catch (e) { /* 무시 */ }
+      return;
+    }
+    const away = offAt ? Date.now() - offAt : 0;
+    if (offAt) { addGap(offAt, Date.now()); offAt = 0; }
+    const tr = stream && stream.getAudioTracks()[0];
+    if (!mr || mr.state === 'inactive' || !tr || tr.readyState === 'ended') { cutNow(); return; }
+    wakeOn();
+    if (away >= GAP_WARN) toast('끄적노트 화면이 꺼져 있던 ' + ago(Math.round(away / 1000)) + ' 동안 소리가 빠졌을 수 있어요. 녹음은 이어지고 있어요', null, null, 8000);
+  });
+  window.addEventListener('pagehide', () => { if (recording) savePart(); });
+  document.addEventListener('freeze', () => { if (recording) savePart(); });
+
+  /* 앱이 닫혀 끝내지 못한 녹음 살리기: 조각을 순서대로 이어 붙여 '저장 확인 안 됨' 녹음으로 만든다 */
+  async function liveElsewhere(id, at) {
+    if (navigator.locks && navigator.locks.request) {
+      try { return await navigator.locks.request('kk-rec-' + id, { ifAvailable: true }, lock => !lock); } catch (e) { /* 아래로 */ }
+    }
+    return Date.now() - at < 60000;
+  }
+  async function recover() {
+    if (db.usingFallback) return [];
+    const all = await db.all(), groups = new Map(), got = [];
+    all.filter(d => d.kind === 'recpart' && d.recId).forEach(p => { if (!groups.has(p.recId)) groups.set(p.recId, []); groups.get(p.recId).push(p); });
+    for (const [id, parts] of groups) {
+      if (recording && id === recId) continue;
+      parts.sort((a, b) => a.seq - b.seq);
+      const last = parts[parts.length - 1];
+      if (await liveElsewhere(id, last.at)) continue; // 다른 창에서 녹음 중
+      if (!all.some(d => d.id === 'rec-' + id)) { // 이미 보관됐으면 조각만 지움
+        const blob = new Blob(parts.map(p => p.blob).filter(Boolean), { type: last.mime });
+        if (blob.size) {
+          const doc = { id: 'rec-' + id, kind: 'rec', noteId: last.noteId, createdAt: last.t0, duration: Math.max(1, Math.round((last.at - last.t0) / 1000)),
+            mime: last.mime, size: blob.size, name: defaultName(last.t0), draft: true, cut: 'closed', cutAt: last.at, blob };
+          if (last.gaps && last.gaps.length) doc.gaps = last.gaps;
+          const memo = memoOf(last.noteId, last.recFrom);
+          if (memo) doc.memo = memo;
+          try { await db.putRaw(doc); got.push(doc); } catch (e) { continue; }
+        }
+      }
+      try { await db.delMany(parts.map(p => p.id)); } catch (e) { /* 무시 */ }
+    }
+    return got;
   }
 
   /* ---------- 저장 여부 확인 ---------- */
@@ -135,6 +260,13 @@
     askUrl = URL.createObjectURL(doc.blob);
     const n = A().S.notes.get(doc.noteId);
     $('rsMeta').textContent = '길이 ' + fmtDur(doc.duration) + ' · ' + fmtSize(doc.size) + (n ? ' · 「' + KK.views.noteLabel(n) + '」 노트에 붙어요' : '');
+    const w = [], g = gapSum(doc.gaps);
+    if (doc.cut === 'closed') w.push('앱이 닫혀 녹음이 ' + hhmm(doc.cutAt) + '쯤 끊겼어요. 그때까지 녹음된 부분을 살렸어요.');
+    else if (doc.cut) w.push('녹음이 ' + hhmm(doc.cutAt) + '쯤 끊겼어요(화면이 꺼져 마이크가 멈춤 등). 그때까지 녹음된 부분이에요.');
+    if (g.sec >= 30) w.push('끄적노트 화면이 꺼져 있던 ' + g.n + '번(모두 ' + ago(g.sec) + ') 동안 소리가 빠졌을 수 있어요. 들어 보고 저장해 주세요.');
+    if (doc.cut) w.push('저장한 뒤 이어서 녹음할 수 있어요.');
+    $('rsWarn').textContent = w.join(' ');
+    $('rsWarn').hidden = !w.length;
     $('rsAudio').src = askUrl;
     $('rsName').value = doc.name;
     $('rsDiscard').textContent = '저장 안 함';
@@ -153,7 +285,8 @@
       else { n.body = (n.body || '').replace(/\s+$/, '') + '\n' + line; n.updatedAt = Date.now(); db.put(n); }
     }
     await refresh();
-    toast('녹음을 저장했어요 · 녹음 탭에서 들을 수 있어요', '녹음 탭', () => A().setView('rec'));
+    if (doc.cut) toast('녹음을 저장했어요 · 끊긴 뒤부터 이어서 녹음할까요?', '이어서 녹음', () => { if (!recording) startRecording(); }, 10000);
+    else toast('녹음을 저장했어요 · 녹음 탭에서 들을 수 있어요', '녹음 탭', () => A().setView('rec'));
   }
   async function confirmDiscard() {
     const doc = asking; if (!doc) return;
@@ -299,6 +432,7 @@
       } }) : null,
       h('b', null, r.name || defaultName(r.createdAt)),
       r.draft ? h('span', { class: 'chip new' }, '저장 확인 안 됨') : null,
+      r.cut ? h('span', { class: 'chip plain', title: '화면이 꺼지거나 앱이 닫혀 중간에 끊긴 녹음' }, '중간에 끊김') : null,
       !r.draft && r.minutes ? h('span', { class: 'chip' }, '회의록') : null,
       !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
       !r.draft && !r.minutes && r.autoMinutes === 'error' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)' }, '자동 회의록 실패') : null,
@@ -448,10 +582,15 @@
   $('btnRecord').dataset.title = isAndroid ? '녹음 (끄적노트로 녹음 또는 음성 녹음 앱으로 녹음)' : '소리를 녹음해 이 노트에 저장';
   $('btnRecord').title = $('btnRecord').dataset.title;
   tick(); // 앱을 다시 열었을 때 음성 녹음 앱 녹음 중 표시를 이어서
-  KK.voice = { refresh, renderList, show, search, isAndroid, recTarget, endMark, getMark, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
+  KK.voice = { refresh, renderList, show, search, isAndroid, recTarget, endMark, getMark, recover, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
 
-  // 시작할 때: 저장 여부를 정하지 않은 녹음이 있으면 알려 준다
-  refresh().then(async () => {
+  // 시작할 때: 앱이 닫혀 끊긴 녹음을 살려 저장할지 묻고, 아니면 저장 여부를 정하지 않은 녹음을 알려 준다
+  refresh();
+  (A().ready || Promise.resolve()).catch(() => {}).then(async () => {
+    let got = [];
+    try { got = await recover(); } catch (e) { got = []; }
+    await refresh();
+    if (got.length) { askSave(got[0]); return; }
     const drafts = (await allRecs()).filter(r => r.draft);
     if (drafts.length) toast('저장할지 정하지 않은 녹음이 ' + drafts.length + '개 있어요', '녹음 탭', () => A().setView('rec'), 8000);
   });

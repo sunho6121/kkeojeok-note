@@ -874,8 +874,8 @@ body[data-view="write"] .recpill{display:none}
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2 id="rqHead">어떻게 녹음할까요?</h2>
     <div class="rqpick">
-      <button type="button" class="rqopt" id="rqWeb"><b>끄적노트로 녹음</b><span>바로 녹음 시작 · 파일은 끄적노트 녹음 탭에 저장<br>노트를 쓰거나 다른 탭을 봐도 계속 녹음 · 녹음 버튼이나 위쪽 ●를 누르면 끝남 · 앱을 닫으면 멈춤</span></button>
-      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음<br>노트에 시작 표시 → 음성 녹음 앱을 직접 열어 녹음 → 끝나면 공유 → 끄적노트</span></button>
+      <button type="button" class="rqopt" id="rqWeb"><b>끄적노트로 녹음</b><span>바로 녹음 시작 · 파일은 끄적노트 녹음 탭에 저장<br>노트를 쓰거나 다른 탭을 봐도 계속 녹음 · 녹음 버튼이나 위쪽 ●를 누르면 끝남<br>탭 커버를 닫거나 화면이 꺼지면 멈출 수 있음(그때까지는 저장됨)</span></button>
+      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음 · 탭 커버를 닫아도 계속 녹음<br>노트에 시작 표시 → 음성 녹음 앱을 직접 열어 녹음 → 끝나면 공유 → 끄적노트</span></button>
     </div>
     <details class="rqhelp" id="rqHelp">
       <summary>음성 녹음 앱이 저절로 열리지 않는 이유 · 빨리 여는 법</summary>
@@ -929,11 +929,12 @@ body[data-view="write"] .recpill{display:none}
   <form method="dialog" class="dlg" onsubmit="return false">
     <h2>녹음을 저장할까요?</h2>
     <p id="rsMeta"></p>
+    <p class="shwarn" id="rsWarn" hidden></p>
     <audio id="rsAudio" controls preload="metadata" style="width:100%"></audio>
     <label>이름
       <input type="text" id="rsName" autocomplete="off">
     </label>
-    <p>저장하면 녹음 탭에서 다시 듣고, 이름을 바꾸고, 파일로 받을 수 있어요.</p>
+    <p>저장하면 녹음 탭에서 다시 듣고, 이름을 바꾸고, 메일·카카오톡 등으로 보낼 수 있어요.</p>
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn danger" id="rsDiscard">저장 안 함</button>
       <button type="button" class="btn primary" id="rsSave">저장</button>

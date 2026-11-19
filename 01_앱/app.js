@@ -478,7 +478,7 @@
   }
   async function exportBackup() {
     flushSave();
-    const docs = (await db.all()).filter(d => !['rec', 'att'].includes(d.kind)); // 녹음·붙인 자료 파일은 백업에서 뺀다(용량)
+    const docs = (await db.all()).filter(d => !['rec', 'recpart', 'att'].includes(d.kind)); // 녹음·녹음 조각·붙인 자료 파일은 백업에서 뺀다(용량)
     saveFile('끄적노트-백업-' + D.today() + '.json', JSON.stringify({ app: 'kkeojeok', version: 3, exportedAt: new Date().toISOString(), docs }, null, 1), 'application/json');
   }
   async function importBackup(file) {
@@ -933,5 +933,5 @@
       navigator.serviceWorker.register('sw.js').catch(() => { /* 오프라인 캐시 없이도 동작 */ });
     }
   }
-  start();
+  KK.app.ready = start(); // 노트를 다 불러온 뒤에 할 일(끊긴 녹음 살리기 등)이 기다림
 })();

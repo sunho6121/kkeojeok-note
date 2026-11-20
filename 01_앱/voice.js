@@ -75,8 +75,10 @@
      ① 10초마다 녹음 조각(kind 'recpart')을 저장해 두고, 앱이 닫혔다 다시 열리면 이어 붙여 살린다(recover).
      ② 화면이 꺼졌던 때(gaps)를 기억해 알려 주고, 마이크가 끊겼으면 그때까지를 저장하고 이어서 녹음하게 한다.
      ③ 화면이 다시 켜지면 화면 켜 두기(wake lock)를 다시 건다(화면이 꺼지면 저절로 풀림).
-     다른 창에서 녹음 중인 조각을 건드리지 않게 녹음하는 동안 Web Locks('kk-rec-<id>')를 쥐고 있다. */
-  const PART_MS = 10000, GAP_WARN = 30000;
+     다른 창에서 녹음 중인 조각을 건드리지 않게 녹음하는 동안 Web Locks('kk-rec-<id>')를 쥐고 있다.
+     태블릿 확인(2026-11-20, kk-v26): 커버를 닫은 동안 녹음은 이어지지만 소리가 들어가지 않음(안드로이드가 뒤에 있는 앱의 마이크를 막음)
+     → 그 구간을 '소리 없는 곳'으로 녹음 안 위치(0:00부터)와 함께 알린다. */
+  const PART_MS = 10000, GAP_WARN = 10000;
   let recId = null, pend = [], seq = 0, lastPart = 0, partNow = false, partP = Promise.resolve(), unlock = null;
   let offAt = 0, muteAt = 0, gaps = [], cutAt = 0, lastData = 0;
   const ago = s => (s < 60 ? s + '초' : Math.round(s / 60) + '분');
@@ -96,15 +98,20 @@
     } catch (e) { /* 무시: 다음에 열 때 정리 */ }
   }
   function addGap(a, b) { if (b - a >= 3000) gaps.push({ at: a, sec: Math.round((b - a) / 1000) }); }
-  // 화면 꺼짐·마이크 멈춤이 겹친 구간은 합쳐서 센다
-  function gapSum(list) {
-    const s = (list || []).map(g => [g.at, g.at + g.sec * 1000]).sort((x, y) => x[0] - y[0]);
-    let n = 0, tot = 0, cs = 0, ce = -1;
+  // 화면 꺼짐·마이크 멈춤이 겹친 구간은 합치고, 10초 넘는 것만 '소리 없는 곳'으로 → [[시작, 끝], …]
+  function bigGaps(list) {
+    const s = (list || []).map(g => [g.at, g.at + g.sec * 1000]).sort((x, y) => x[0] - y[0]), out = [];
     for (const [a, b] of s) {
-      if (a > ce) { if (ce >= 0) { n++; tot += ce - cs; } cs = a; ce = b; } else ce = Math.max(ce, b);
+      const l = out[out.length - 1];
+      if (l && a <= l[1]) l[1] = Math.max(l[1], b); else out.push([a, b]);
     }
-    if (ce >= 0) { n++; tot += ce - cs; }
-    return { n, sec: Math.round(tot / 1000) };
+    return out.filter(([a, b]) => b - a >= GAP_WARN);
+  }
+  // 녹음 안 위치(0:00부터)로: '2:10~3:45, 10:02~11:30 외 1곳'
+  function gapWhere(list, start) {
+    const m = bigGaps(list), at = x => fmtDur(Math.max(0, Math.round((x - start) / 1000)));
+    const s = m.slice(0, 3).map(([a, b]) => at(a) + '~' + at(b)).join(', ');
+    return m.length > 3 ? s + ' 외 ' + (m.length - 3) + '곳' : s;
   }
   function memoOf(noteId, from) {
     const n = A().S.notes.get(noteId), body = (n && n.body) || '';
@@ -154,7 +161,7 @@
     recNote = startNote.id;
     recFrom = (startNote.body || '').length; // 녹음하는 동안 쓴 메모를 회의록 만들 때 함께 쓰려고
     mr.start(1000); recording = true; t0 = Date.now();
-    toast(isAndroid ? '녹음을 시작했어요. 화면을 켜 둔 채로 두세요(탭 커버를 닫으면 멈출 수 있어요). 끝낼 때는 녹음 버튼이나 위쪽 ●'
+    toast(isAndroid ? '녹음을 시작했어요. 화면을 켜 두세요(탭 커버를 닫은 동안은 소리가 녹음되지 않아요). 끝낼 때는 녹음 버튼이나 위쪽 ●'
       : '녹음을 시작했어요. 녹음 버튼이나 위쪽 ●를 누르면 끝나요', null, null, isAndroid ? 7000 : 5000);
     await wakeOn();
     recMark(true); tick();
@@ -215,7 +222,7 @@
     const tr = stream && stream.getAudioTracks()[0];
     if (!mr || mr.state === 'inactive' || !tr || tr.readyState === 'ended') { cutNow(); return; }
     wakeOn();
-    if (away >= GAP_WARN) toast('끄적노트 화면이 꺼져 있던 ' + ago(Math.round(away / 1000)) + ' 동안 소리가 빠졌을 수 있어요. 녹음은 이어지고 있어요', null, null, 8000);
+    if (away >= GAP_WARN) toast('화면이 꺼져 있던 ' + ago(Math.round(away / 1000)) + ' 동안은 소리가 녹음되지 않았어요. 지금은 다시 녹음되고 있어요', null, null, 8000);
   });
   window.addEventListener('pagehide', () => { if (recording) savePart(); });
   document.addEventListener('freeze', () => { if (recording) savePart(); });
@@ -260,10 +267,10 @@
     askUrl = URL.createObjectURL(doc.blob);
     const n = A().S.notes.get(doc.noteId);
     $('rsMeta').textContent = '길이 ' + fmtDur(doc.duration) + ' · ' + fmtSize(doc.size) + (n ? ' · 「' + KK.views.noteLabel(n) + '」 노트에 붙어요' : '');
-    const w = [], g = gapSum(doc.gaps);
+    const w = [], gw = gapWhere(doc.gaps, doc.createdAt);
     if (doc.cut === 'closed') w.push('앱이 닫혀 녹음이 ' + hhmm(doc.cutAt) + '쯤 끊겼어요. 그때까지 녹음된 부분을 살렸어요.');
     else if (doc.cut) w.push('녹음이 ' + hhmm(doc.cutAt) + '쯤 끊겼어요(화면이 꺼져 마이크가 멈춤 등). 그때까지 녹음된 부분이에요.');
-    if (g.sec >= 30) w.push('끄적노트 화면이 꺼져 있던 ' + g.n + '번(모두 ' + ago(g.sec) + ') 동안 소리가 빠졌을 수 있어요. 들어 보고 저장해 주세요.');
+    if (gw) w.push('화면이 꺼져 있어 소리가 녹음되지 않은 곳: ' + gw + '.');
     if (doc.cut) w.push('저장한 뒤 이어서 녹음할 수 있어요.');
     $('rsWarn').textContent = w.join(' ');
     $('rsWarn').hidden = !w.length;
@@ -433,6 +440,7 @@
       h('b', null, r.name || defaultName(r.createdAt)),
       r.draft ? h('span', { class: 'chip new' }, '저장 확인 안 됨') : null,
       r.cut ? h('span', { class: 'chip plain', title: '화면이 꺼지거나 앱이 닫혀 중간에 끊긴 녹음' }, '중간에 끊김') : null,
+      bigGaps(r.gaps).length ? h('span', { class: 'chip plain', title: '화면이 꺼져 있어 소리가 녹음되지 않은 곳이 있음' }, '소리 빠짐') : null,
       !r.draft && r.minutes ? h('span', { class: 'chip' }, '회의록') : null,
       !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
       !r.draft && !r.minutes && r.autoMinutes === 'error' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)' }, '자동 회의록 실패') : null,
@@ -464,7 +472,9 @@
           toast('「' + (r.name || '녹음') + '」을(를) 지웠어요', '되돌리기', async () => { await db.putRaw(r); await refresh(); renderList(); });
         } }, '삭제')]);
     }
-    li.append(...[title, meta, hit, player, acts].filter(Boolean));
+    const gw = r.blob ? gapWhere(r.gaps, r.createdAt) : '';
+    const gapLine = gw ? h('div', { class: 'it-m' }, '소리 없는 곳(화면 꺼짐): ' + gw) : null;
+    li.append(...[title, meta, gapLine, hit, player, acts].filter(Boolean));
     return li;
   }
 

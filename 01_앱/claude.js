@@ -22,7 +22,7 @@ window.KK = window.KK || {};
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail', 'src'],
+          required: ['ref', 'type', 'status', 'title', 'date', 'time', 'endTime', 'place', 'to', 'priority', 'detail', 'src', 'group'],
           properties: {
             ref: { type: 'string' },
             type: { type: 'string', enum: ['event', 'task', 'notice', 'memo'] },
@@ -36,6 +36,7 @@ window.KK = window.KK || {};
             priority: { type: 'string', enum: ['high', 'normal', 'low'] },
             detail: { type: 'string' },
             src: { type: 'string' },
+            group: { type: 'string' },
           },
         },
       },
@@ -53,6 +54,7 @@ window.KK = window.KK || {};
       e.title + (e.to ? ' (대상: ' + e.to + ')' : ''),
       (e.date || '날짜 없음') + (e.time ? ' ' + e.time : ''),
       e.place || '-',
+      '업무: ' + (e.group || '-'),
       e.deleted ? '삭제됨 — 사용자가 지움, 다시 만들지 말 것'
         : '상태: ' + STATUS_KO[e.status || 'todo'] + (e.locked ? ' (사용자가 직접 정함 — 바꾸지 말 것)' : '') + (e.edited ? ' · 사용자가 앱에서 고침(제목·날짜 등 그대로 둘 것)' : ''),
     ].join(' | ')).join('\n');
@@ -67,7 +69,7 @@ window.KK = window.KK || {};
     return rules.join('\n');
   }
 
-  function buildPrompt(text, att, existing) {
+  function buildPrompt(text, att, existing, groups) {
     const cal = KK.date.calendarText();
     return [
       '아래는 사용자가 태블릿의 한 노트에 계속 이어 쓰는 메모야. 메모 전체를 읽고 일정과 할 일을 정리해 줘.',
@@ -95,6 +97,8 @@ window.KK = window.KK || {};
       '- tags는 주제어 0~3개, 각 6자 이내, # 없이.',
       '- src에는 그 항목의 근거가 된 메모 원문 구절을 한 글자도 고치지 말고 그대로 복사해(한 줄 안, 60자 이내). 필기·첨부에서 왔거나 찾기 어려우면 "".',
       '- items의 title은 "누가/무엇을" 알 수 있게 짧게. detail에는 메모에 적힌 보충 설명이나 진행 상황만. notice가 아니면 to는 "".',
+      '- group: 그 항목이 나온 업무 이름(사업·행사·회의·보고서·민원 등 하나의 일 덩어리). 한 업무에서 파생된 준비·예약·안내·연락·품의·자료·결과보고 같은 일은 모두 같은 group으로 묶어. 15자 이내 명사형(예: 하반기 대표협의체). 아래 "지금 쓰는 업무 이름"에 같은 업무가 있으면 글자 하나 바꾸지 말고 그대로 써. 같은 업무에서 나온 일이 아직 하나뿐이어도 업무가 분명하면 이름을 붙여. 어느 업무에도 속하지 않는 단순한 일이면 "".',
+      '- 기존 항목에 업무가 있으면 그 이름을 그대로 돌려줘.',
       '- notice와 memo는 개조식으로 간결·명료하게: title은 핵심 한 줄 25자 이내, 명사형으로 끝냄(~제출, ~확정, ~필요, ~안내). detail은 꼭 필요한 보충만 줄바꿈(\\n)으로 나눈 1~3줄, 각 40자 이내, ~함·~임·명사형으로 끝냄. 날짜·숫자는 남기고 인사·반복·군더더기는 빼. date·to에 넣은 기한·대상은 detail에 다시 쓰지 마.',
       '',
       '기존 일정과 상태 규칙',
@@ -112,8 +116,10 @@ window.KK = window.KK || {};
       '- "사용자가 앱에서 고침" 표시된 기존 항목은 같은 일이면 ref를 넣되, 제목·날짜·시간·장소·대상·내용은 기존 값을 그대로 써.',
       '- 메모의 "[이어서 할 일 · …]" 줄 아래 "- "로 시작하는 줄들은 앱이 전날까지 못 끝낸 기존 항목을 불러와 적은 목록이야. 이 줄들로 새 항목을 만들지 마. 그 줄이나 아래쪽에 끝냄·완료·취소·진행·기한 변경 등이 적혀 있을 때만 해당 기존 항목(ref)을 고쳐서 돌려줘. 줄 앞의 [높음]·[보통]·[낮음]은 사용자가 정한 우선순위야.',
       '',
-      '이 노트에서 전에 정리한 항목 (번호 | 종류 | 제목 | 날짜 | 장소 | 상태):',
+      '이 노트에서 전에 정리한 항목 (번호 | 종류 | 제목 | 날짜 | 장소 | 업무 | 상태):',
       existingText(existing),
+      '',
+      '지금 쓰는 업무 이름: ' + (groups && groups.length ? groups.join(' / ') : '(없음)'),
       attachRule(att),
       '',
       '메모:',
@@ -403,11 +409,11 @@ window.KK = window.KK || {};
     },
 
     /* file: 삼성 노트에서 가져온 파일 {kind:'document'|'image', media_type, data(base64)} */
-    async organize({ apiKey, model, effort, text, imageB64, file, existing, signal }) {
+    async organize({ apiKey, model, effort, text, imageB64, file, existing, groups, signal }) {
       const content = [];
       if (file) content.push({ type: file.kind === 'document' ? 'document' : 'image', source: { type: 'base64', media_type: file.media_type, data: file.data } });
       if (imageB64) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageB64 } });
-      content.push({ type: 'text', text: buildPrompt(text, { ink: !!imageB64, file: !!file }, existing) });
+      content.push({ type: 'text', text: buildPrompt(text, { ink: !!imageB64, file: !!file }, existing, groups) });
       const out = await call({
         apiKey, model, effort, content, signal, withSchema: true,
         useFallback: FALLBACK_MODELS.includes(model),
@@ -434,8 +440,35 @@ window.KK = window.KK || {};
           priority: it && it.priority === 'high' ? 'high' : 'normal',
           detail: str(it && it.detail).slice(0, 200),
           src: str(it && it.src).slice(0, 120), // 노트 원문 구절(고칠 때 취소선 긋는 곳)
+          group: str(it && it.group).slice(0, 30), // 업무 이름(업무 탭에서 묶음)
         })).filter(it => it.title),
       };
+    },
+    /* 이미 정리된 할 일·전달을 업무별로 묶기(업무 탭 '업무별로 묶기'). 제목·내용·원문 구절만 보냄(노트 본문은 안 보냄) */
+    async groupItems({ apiKey, model, items, known, signal }) {
+      const TYPE_KO = { task: '할 일', notice: '전달' };
+      const text = [
+        '아래는 사용자의 업무 목록이야. 각 항목이 어느 업무(사업·행사·회의·보고서·민원 등 하나의 일 덩어리)에서 나왔는지 업무 이름을 붙여 줘.',
+        '',
+        '규칙',
+        '- 한 업무에서 파생된 준비·예약·안내·연락·품의·자료·결과보고 같은 일은 모두 같은 이름으로 묶어.',
+        '- 이름은 15자 이내 명사형, 사용자가 알아볼 수 있게(예: 하반기 대표협의체, 의료공백 실무회의).',
+        '- "이미 있는 업무"에 맞는 것이 있으면 그 이름을 글자 하나 바꾸지 말고 그대로 써.',
+        '- 같은 업무에서 나온 일이 하나뿐이어도 업무가 분명하면 이름을 붙여. 어느 업무에도 속하지 않는 단순한 일이면 "".',
+        '- 목록에 없는 내용은 지어내지 마. 모든 ref를 한 번씩 돌려줘.',
+        '',
+        '이미 있는 업무 (이름: 속한 일 예시):',
+        known && known.length ? known.map(([g, ts]) => '- ' + g + ': ' + ts.join(' / ')).join('\n') : '(없음)',
+        '',
+        '묶을 항목 (번호 | 종류 | 제목 | 기한 | 대상 | 내용 | 노트 원문):',
+        items.map(i => [i.ref, TYPE_KO[i.type] || '할 일', i.title, i.date || '-', i.to || '-', i.detail || '-', i.src || '-'].join(' | ')).join('\n'),
+      ].join('\n');
+      const schema = { type: 'object', additionalProperties: false, required: ['groups'], properties: { groups: { type: 'array', items: {
+        type: 'object', additionalProperties: false, required: ['ref', 'group'], properties: { ref: { type: 'string' }, group: { type: 'string' } } } } } };
+      const out = await call({ apiKey, model, effort: 'medium', signal, schema, maxTokens: 8000, content: [{ type: 'text', text }], useFallback: FALLBACK_MODELS.includes(model) });
+      if (out.stop === 'max_tokens') throw fail('bad_output', '결과가 잘렸어요');
+      const r = parseJSON(out.text);
+      return (Array.isArray(r.groups) ? r.groups : []).map(g => ({ ref: String(g && g.ref || '').trim(), group: String(g && g.group || '').trim().slice(0, 30) })).filter(g => g.ref);
     },
     async test({ apiKey, model }) {
       const out = await call({ apiKey, model, effort: 'low', content: [{ type: 'text', text: '연결 확인이야. "확인"이라고만 답해.' }], maxTokens: 2000 });

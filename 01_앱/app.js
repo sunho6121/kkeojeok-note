@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true, workBy: 'group' };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -221,7 +221,7 @@
     mine.forEach((it, idx) => {
       const ref = 'e' + (idx + 1);
       refMap[ref] = it;
-      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, to: it.to || '', status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted, edited: !!(it.userFields && Object.keys(it.userFields).length) });
+      list.push({ ref, type: it.type, title: it.title, date: it.date, time: it.time, place: it.place, to: it.to || '', group: it.group || '', status: it.status || 'todo', locked: !!it.locked, deleted: !!it.deleted, edited: !!(it.userFields && Object.keys(it.userFields).some(k => k !== 'group')) });
     });
     return { refMap, list };
   }
@@ -247,7 +247,7 @@
       const out = await KK.claude.organize({
         apiKey: settings.apiKey, model: settings.model, effort: settings.effort,
         text: n.importMarker ? text.replace(n.importMarker, '').trim() : text,
-        imageB64, file, existing: list, signal: ctl.signal,
+        imageB64, file, existing: list, groups: KK.work ? KK.work.groupNames().slice(0, 40) : [], signal: ctl.signal,
       });
       const c = applyResult(n, out, hadInk, refMap, !!file);
       if (KK.gcal) KK.gcal.syncSoon();
@@ -316,14 +316,17 @@
       const t = r.ref ? refMap[r.ref] : null;
       if (t) {
         if (t.deleted) return;
-        const before = JSON.stringify([FIELDS.map(f => t[f]), t.status]);
+        const before = JSON.stringify([FIELDS.map(f => t[f]), t.status]), gBefore = t.group;
         // 사람이 정한 우선순위·앱에서 직접 고친 칸은 그대로
         FIELDS.forEach(f => { if (f === 'priority' && t.priSet) return; if (t.userFields && t.userFields[f]) return; if (r[f] !== '' && r[f] != null) t[f] = r[f]; });
+        // 업무 이름(업무 탭 묶음): 사람이 정했으면 그대로, ''는 '묶을 업무 없음'(처음일 때만)
+        if (!(t.userFields && t.userFields.group)) { if (r.group) t.group = r.group; else if (t.group === undefined) t.group = ''; }
         if (r.src && r.src !== t.src) { t.src = r.src; srcOnly.push(t); } // 노트의 원문 구절(고칠 때 취소선 긋는 곳)
         if (!t.locked && r.status && r.status !== (t.status || 'todo')) {
           t.status = r.status; t.statusAt = now; t.doneAt = r.status === 'done' ? now : 0;
         }
         if (JSON.stringify([FIELDS.map(f => t[f]), t.status]) !== before) { t.updatedAt = now; changed.push(t); updated++; }
+        else if (t.group !== gBefore) srcOnly.push(t); // 업무 이름만 바뀜: 저장만(바뀐 일정으로 세지 않음)
         return;
       }
       const k = key(r);
@@ -331,9 +334,10 @@
       const doc = { id: 't-' + KK.uid(), kind: 'item', noteId: n.id, createdAt: now, updatedAt: now, locked: false, deleted: false, status: r.status || 'todo', doneAt: r.status === 'done' ? now : 0 };
       FIELDS.forEach(f => { doc[f] = r[f] || ''; });
       doc.src = r.src || '';
+      doc.group = r.group || '';
       S.items.set(doc.id, doc); changed.push(doc); live.add(k); added++;
     });
-    db.putMany([n, ...changed, ...srcOnly.filter(x => !changed.includes(x))]);
+    db.putMany([n, ...changed, ...[...new Set(srcOnly)].filter(x => !changed.includes(x))]);
     if (KK.board) KK.board.sync(changed);
     return { added, updated };
   }

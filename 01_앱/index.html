@@ -298,7 +298,7 @@ dialog::backdrop{background:rgba(10,14,20,.45)}
 .recpill .recdot{display:inline-block}
 body[data-view="write"] .recpill{display:none}
 #dlgPri{width:min(680px,calc(100vw - 24px))}
-#dlgEdit,#dlgNote{width:min(560px,calc(100vw - 24px))}
+#dlgEdit,#dlgNote,#dlgGroup{width:min(560px,calc(100vw - 24px))}
 .acnt:not(:empty){font-family:var(--f-mono);font-size:12px;min-width:20px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
 #dlgAtt{width:min(680px,calc(100vw - 24px))}
 .alist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
@@ -450,7 +450,8 @@ body[data-view="write"] .recpill{display:none}
 #vWork{overflow:auto}
 .work{width:100%;max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-bottom:24px}
 .whead{display:flex;align-items:center;gap:4px}
-.whead h2{font-family:var(--f-display);font-size:22px;margin:0 6px}
+.whead h2{font-family:var(--f-display);font-size:22px;margin:0 6px;white-space:nowrap}
+@media (max-width:500px){.whead h2{font-size:19px;margin:0 2px}.whead .nav{min-width:36px;padding:0 6px}}
 .whead .nav{min-width:46px;font-size:24px;padding:0 10px;line-height:1}
 .whead .nav:disabled{opacity:.25;cursor:default}
 .wcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
@@ -474,6 +475,27 @@ body[data-view="write"] .recpill{display:none}
 .wrow.s-done .wt{color:var(--muted)}
 .wrow.late .chk i{border-color:var(--danger)}
 .wrow.meet .chk svg{width:20px;height:20px;opacity:1;color:var(--accent)}
+/* 업무별 묶음 (kk-v27) */
+.wtools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.wtools h3{margin-right:auto}
+.wtools .seg button{min-height:36px}
+.wtools .btn{min-height:36px}
+.wgrp{border:1px solid var(--line);border-radius:12px;padding:0 4px 0 8px}
+.wgrp>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:46px;cursor:pointer;padding-right:2px}
+.wgrp>summary::-webkit-details-marker{display:none}
+.wgrp>summary::before{content:'';width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex:none;margin:0 3px 0 2px}
+.wgrp[open]>summary::before{transform:rotate(45deg)}
+.wgrp .gname{font-weight:600;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wgrp .gprog{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.wgrp .gprog.late{color:var(--danger)}
+.wgrp .gedit{margin-left:auto;width:40px;height:40px;display:inline-grid;place-items:center;color:var(--muted);border-radius:10px}
+.wgrp .gedit svg{width:18px;height:18px}
+.wgrp ul{list-style:none;margin:0;padding:0 0 4px}
+.wgrp ul .wrow:first-child{border-top:1px solid var(--rule)}
+.wtag em.grp{color:var(--ink);background:var(--accent-soft);border-color:transparent;max-width:12em;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
+.gpick{display:flex;flex-wrap:wrap;gap:6px}
+.gpick button{min-height:40px;padding:0 13px;border:1px solid var(--line);border-radius:999px;background:var(--sheet);font-size:14px;color:var(--ink)}
+.gpick button:hover{border-color:var(--accent);color:var(--accent)}
 .wempty{color:var(--muted);font-size:14px;margin:0 0 10px}
 .wsum{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px}
 .wsum-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -828,6 +850,23 @@ body[data-view="write"] .recpill{display:none}
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn ghost" id="eCancel">취소</button>
       <button type="button" class="btn primary" id="eSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgGroup" aria-labelledby="gHead">
+  <form method="dialog" class="dlg" onsubmit="return false">
+    <h2 id="gHead" tabindex="-1" style="outline:none">업무 바꾸기</h2>
+    <p id="gInfo"></p>
+    <p id="gListL" style="color:var(--ink);font-weight:500">이 업무로 옮기기</p>
+    <div class="gpick" id="gList"></div>
+    <label><span id="gNameL">새 업무 이름</span><input type="text" id="gName" maxlength="30" autocomplete="off"></label>
+    <p>직접 정한 업무는 다시 정리해도 Claude가 바꾸지 않아요.</p>
+    <p class="errmsg" id="gMsg" role="alert"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn ghost" id="gNone" style="margin-right:auto">묶음에서 빼기</button>
+      <button type="button" class="btn ghost" id="gCancel">취소</button>
+      <button type="button" class="btn primary" id="gSave">저장</button>
     </div>
   </form>
 </dialog>

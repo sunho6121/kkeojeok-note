@@ -169,7 +169,7 @@ window.KK = window.KK || {};
     return m;
   }
 
-  function row(it, today) {
+  function row(it, today, showGroup) {
     const st = it.status || 'todo', vs = viewStatus(it, today);
     let when = '';
     if (vs === 'late') when = md(it.date) + ' 지남';
@@ -182,6 +182,7 @@ window.KK = window.KK || {};
         h('span', { class: 'wtag' },
           it.priority === 'high' && st !== 'done' ? h('em', { class: 'hi' }, '높음') : null,
           it.priority === 'low' && st !== 'done' ? h('em', null, '낮음') : null,
+          showGroup && gname(it.group) ? h('em', { class: 'grp' }, gname(it.group)) : null,
           it.type === 'notice' ? h('em', null, '전달') : null,
           it.source === 'minutes' ? h('em', null, '회의') : null,
           it.board && !it.board.gone ? h('em', { class: 'go' }, '보드') : null,
@@ -190,10 +191,165 @@ window.KK = window.KK || {};
           st === 'hold' ? h('em', null, '보류') : null)),
       h('span', { class: 'wdate' + (vs === 'late' ? ' late' : '') }, st === 'done' ? (it.doneAt ? mdT(it.doneAt) : '') : when));
   }
-  function section(title, list, today) {
+  function section(title, list, today, showGroup) {
     if (!list.length) return null;
-    return h('div', { class: 'wsec' }, h('h4', null, title, h('span', null, list.length)), h('ul', null, list.map(i => row(i, today))));
+    return h('div', { class: 'wsec' }, h('h4', null, title, h('span', null, list.length)), h('ul', null, list.map(i => row(i, today, showGroup))));
   }
+
+  /* ---------- 업무별 묶기 (kk-v27) ----------
+     하나의 업무(사업·행사·회의·보고서 등)에서 나온 할 일·전달을 item.group(업무 이름)으로 묶어 보여 준다.
+     - 정리할 때 Claude가 group을 붙임(claude.js). 전에 정리된 것은 '업무별로 묶기' 버튼으로 한 번에(제목·내용만 보냄)
+     - group: undefined = 아직 안 묶음, '' = 묶을 업무 없음
+     - 사람이 고치면(항목의 '업무 바꾸기', 묶음 이름 바꾸기·합치기·풀기) userFields.group → 다시 정리해도 Claude가 안 바꿈 */
+  const gname = s => String(s || '').trim();
+  const PEN = '<path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"/><path d="M14 7l3 3"/>';
+  const FOLDER = '<path d="M3 7.5V18a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-8l-2-2.5H4a1 1 0 0 0-1 1z"/>';
+  function groupNames() {
+    const cut = Date.now() - 60 * 86400000, last = new Map();
+    A().S.items.forEach(i => {
+      const g = gname(i.group);
+      if (!g || i.deleted || i.status === 'cancel') return;
+      const t = Math.max(i.updatedAt || 0, i.groupAt || 0, i.createdAt || 0);
+      if (!OPEN.includes(i.status || 'todo') && t < cut) return;
+      last.set(g, Math.max(last.get(g) || 0, t));
+    });
+    return [...last.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  }
+  const workBy = () => (A().settings.workBy === 'date' ? 'date' : 'group');
+  const folded = new Set(); // 접어 둔 묶음(앱을 연 동안만)
+
+  // 할 일을 업무별로: 같은 업무가 2개 이상(이번 달에 끝낸 것 포함)이면 묶음, 아니면 '그 밖의 할 일'
+  function groupParts(open, work, today, rk, byDate) {
+    const cur = curYM(), members = new Map();
+    work.forEach(i => {
+      const g = gname(i.group);
+      if (!g || i.status === 'cancel') return;
+      if (!OPEN.includes(i.status || 'todo') && !(i.status === 'done' && inMonth(doneTime(i), cur))) return;
+      if (!members.has(g)) members.set(g, []);
+      members.get(g).push(i);
+    });
+    const blocks = [], rest = [], seen = new Set();
+    open.forEach(i => {
+      const g = gname(i.group);
+      if (g && members.get(g).length >= 2) { seen.add(g); return; }
+      rest.push(i);
+    });
+    seen.forEach(g => {
+      const list = members.get(g);
+      const op = list.filter(i => OPEN.includes(i.status || 'todo')).sort((a, b) => rk(a) - rk(b) || byDate(a, b));
+      const dn = list.filter(i => i.status === 'done').sort((a, b) => doneTime(b) - doneTime(a));
+      const late = op.some(i => viewStatus(i, today) === 'late');
+      const due = op.filter(i => i.date && i.status !== 'hold').map(i => i.date).sort()[0] || '';
+      blocks.push({ g, op, dn, late, due });
+    });
+    blocks.sort((a, b) => (b.late - a.late) || (a.due || '9999').localeCompare(b.due || '9999') || a.g.localeCompare(b.g));
+    const out = blocks.map(b => {
+      const d = h('details', { class: 'wgrp', open: !folded.has(b.g) },
+        h('summary', null,
+          h('span', { class: 'gname' }, b.g),
+          h('span', { class: 'gprog' + (b.late ? ' late' : '') }, b.dn.length + '/' + (b.dn.length + b.op.length) + (b.late ? ' · 기한 지남' : b.due ? ' · ' + md(b.due) + '까지' : '')),
+          h('button', { type: 'button', class: 'gedit', title: '업무 이름 바꾸기·합치기', 'aria-label': '「' + b.g + '」 업무 이름 바꾸기·합치기', onclick: e => { e.preventDefault(); e.stopPropagation(); openGroup({ name: b.g }); } }, svg(PEN))),
+        h('ul', null, b.op.map(i => row(i, today)), b.dn.map(i => row(i, today))));
+      d.addEventListener('toggle', () => { if (d.open) folded.delete(b.g); else folded.add(b.g); });
+      return d;
+    });
+    const r = section(blocks.length ? '그 밖의 할 일' : '할 일', rest.sort((a, b) => rk(a) - rk(b) || byDate(a, b)), today, true);
+    if (r) out.push(r);
+    return out;
+  }
+
+  // 아직 안 묶은 할 일을 Claude에게 보내 업무별로 묶기
+  let grouping = false;
+  const notGrouped = () => [...A().S.items.values()].filter(i => isWork(i) && OPEN.includes(i.status || 'todo') && i.group === undefined);
+  async function groupNow() {
+    const st = A().settings;
+    if (!st.apiKey) { toast('업무별로 묶으려면 설정에서 Claude API 키를 넣어 주세요.', '설정 열기', () => A().openSettings(), 7000); return; }
+    if (!navigator.onLine) { toast('인터넷에 연결되면 묶을 수 있어요.'); return; }
+    const todo = notGrouped().slice(0, 150);
+    if (!todo.length || grouping) return;
+    const known = new Map();
+    [...A().S.items.values()].filter(i => isWork(i) && gname(i.group) && i.status !== 'cancel').forEach(i => {
+      const g = gname(i.group);
+      if (!known.has(g)) known.set(g, []);
+      if (known.get(g).length < 4) known.get(g).push(i.title);
+    });
+    const refs = {};
+    const items = todo.map((i, k) => { const ref = 'g' + (k + 1); refs[ref] = i; return { ref, type: i.type, title: i.title, date: i.date || '', to: i.to || '', detail: (i.detail || '').replace(/\s+/g, ' ').slice(0, 80), src: (i.src || '').slice(0, 60) }; });
+    grouping = true; render();
+    try {
+      const out = await KK.claude.groupItems({ apiKey: st.apiKey, model: st.model, items, known: [...known.entries()].slice(0, 40) });
+      const got = new Map(out.map(x => [x.ref, x.group])), now = Date.now(), save = [];
+      Object.entries(refs).forEach(([ref, it]) => {
+        if (it.group !== undefined || (it.userFields && it.userFields.group)) return; // 그사이 정해졌으면 그대로
+        it.group = gname(got.get(ref)).slice(0, 30); it.groupAt = now;
+        save.push(it);
+      });
+      if (save.length) db.putMany(save);
+      const names = new Set(save.map(i => i.group).filter(Boolean));
+      toast(save.length + '개를 살펴 ' + names.size + '개 업무로 묶었어요. 잘못 묶인 것은 눌러서 「업무 바꾸기」로 고칠 수 있어요', null, null, 9000);
+    } catch (e) {
+      const M = { bad_key: 'API 키가 맞지 않아요. 설정에서 키를 확인해 주세요.', offline: '인터넷에 연결되면 묶을 수 있어요.', rate: '요청이 많거나 사용 한도에 닿았어요. 잠시 뒤 다시 눌러 주세요.', server: 'Claude 서버가 바빠요. 잠시 뒤 다시 눌러 주세요.' };
+      if (e.code !== 'cancelled') toast(M[e.code] || '업무별로 묶지 못했어요: ' + (e.message || '알 수 없는 오류'), null, null, 7000);
+    } finally { grouping = false; render(); }
+  }
+
+  /* 업무 고르기 창: { item } 그 일의 업무 바꾸기 / { name } 묶음 이름 바꾸기·합치기·풀기 */
+  let gCtx = null;
+  function openGroup(ctx) {
+    gCtx = ctx;
+    const it = ctx.item, cur = it ? gname(it.group) : ctx.name;
+    const cnt = it ? 1 : [...A().S.items.values()].filter(i => !i.deleted && gname(i.group) === cur).length;
+    $('gHead').textContent = it ? '업무 바꾸기' : '업무 이름 바꾸기';
+    $('gInfo').textContent = it ? '「' + it.title + '」 · 지금: ' + (cur || '묶인 업무 없음')
+      : '「' + cur + '」에 묶인 일 ' + cnt + '개를 함께 바꿔요.';
+    const names = groupNames().filter(n => n !== cur).slice(0, 24), list = $('gList');
+    list.textContent = '';
+    names.forEach(n => list.append(h('button', { type: 'button', onclick: () => applyGroup(n) }, n)));
+    $('gListL').textContent = it ? '이 업무로 옮기기' : '다른 업무에 합치기';
+    $('gListL').hidden = list.hidden = !names.length;
+    $('gNameL').textContent = it ? '새 업무 이름' : '업무 이름';
+    $('gName').value = it ? '' : cur;
+    $('gName').placeholder = it ? '예: 하반기 대표협의체' : '';
+    $('gNone').textContent = it ? '묶음에서 빼기' : '묶음 풀기';
+    $('gNone').hidden = !cur;
+    $('gMsg').textContent = '';
+    $('dlgGroup').showModal();
+  }
+  function applyGroup(name) {
+    const ctx = gCtx;
+    if (!ctx) return;
+    name = gname(name).slice(0, 30);
+    const now = Date.now(), merge = !ctx.item && name && groupNames().includes(name);
+    const list = ctx.item ? [ctx.item] : [...A().S.items.values()].filter(i => !i.deleted && gname(i.group) === ctx.name);
+    const before = list.map(i => [i, i.group, i.groupAt, i.userFields ? Object.assign({}, i.userFields) : undefined]);
+    list.forEach(i => { i.group = name; i.groupAt = now; i.userFields = Object.assign({}, i.userFields || {}, { group: now }); });
+    db.putMany(list);
+    gCtx = null; $('dlgGroup').close();
+    if ($('dlgItem').open) $('dlgItem').close();
+    render();
+    const msg = ctx.item ? (name ? '「' + name + '」 업무로 옮겼어요' : '업무 묶음에서 뺐어요')
+      : !name ? '「' + ctx.name + '」 묶음을 풀었어요' : merge ? '「' + name + '」 업무로 합쳤어요' : '업무 이름을 「' + name + '」(으)로 바꿨어요';
+    toast(msg, '되돌리기', () => {
+      before.forEach(([i, g, ga, uf]) => {
+        if (g === undefined) delete i.group; else i.group = g;
+        if (ga === undefined) delete i.groupAt; else i.groupAt = ga;
+        if (uf === undefined) delete i.userFields; else i.userFields = uf;
+      });
+      db.putMany(list); render();
+    }, 8000);
+  }
+  $('gSave').addEventListener('click', () => {
+    if (!gCtx) return;
+    const v = gname($('gName').value);
+    if (!v) { $('gMsg').textContent = gCtx.item ? '업무 이름을 적거나 위에서 골라 주세요.' : '이름을 적어 주세요. 묶음을 없애려면 「묶음 풀기」를 누르세요.'; $('gName').focus(); return; }
+    if (!gCtx.item && v === gCtx.name) { gCtx = null; $('dlgGroup').close(); return; }
+    applyGroup(v);
+  });
+  $('gNone').addEventListener('click', () => applyGroup(''));
+  $('gCancel').addEventListener('click', () => { gCtx = null; $('dlgGroup').close(); });
+  // 일정 상세 창(업무 탭에서 할 일을 누르면 뜸)의 '업무 바꾸기' 버튼
+  const groupBtn = it => h('button', { type: 'button', class: 'btn', onclick: () => openGroup({ item: it }) }, svg(FOLDER), gname(it.group) ? '업무: ' + gname(it.group) : '업무 정하기');
+
 
   let token = 0;
   async function render() {
@@ -228,20 +384,28 @@ window.KK = window.KK || {};
       const wk = D.ymd(D.addDays(new Date(), 6));
       const late = open.filter(i => viewStatus(i, today) === 'late');
       const active = open.filter(i => i.status !== 'hold' && !late.includes(i));
-      left.append(h('h3', null, '할 일', h('b', null, open.length)));
-      const parts = [
-        section('기한 지남', late, today),
-        section('이번 주', active.filter(i => i.date && i.date <= wk), today),
-        section('다음', active.filter(i => i.date && i.date > wk), today),
-        section('기한 없음', active.filter(i => !i.date), today),
-        section('보류', open.filter(i => i.status === 'hold'), today),
-      ].filter(Boolean);
+      const by = workBy(), ng = notGrouped().length;
+      const pick = v => { A().settings.workBy = v; A().saveSettings(); render(); };
+      left.append(h('div', { class: 'wtools' },
+        h('h3', null, '할 일', h('b', null, open.length)),
+        h('div', { class: 'seg', role: 'group', 'aria-label': '할 일 보기' },
+          h('button', { type: 'button', 'aria-pressed': String(by === 'group'), onclick: () => pick('group') }, '업무별'),
+          h('button', { type: 'button', 'aria-pressed': String(by === 'date'), onclick: () => pick('date') }, '기한별')),
+        by === 'group' && (ng || grouping) ? h('button', { type: 'button', class: 'btn', disabled: grouping, title: '아직 업무가 정해지지 않은 할 일의 제목·내용을 Claude에게 보내 업무별로 묶어요', onclick: groupNow },
+          grouping ? '묶는 중…' : '업무별로 묶기 · ' + ng) : null));
+      const parts = (by === 'group' ? groupParts(open, work, today, rk, byDate) : [
+        section('기한 지남', late, today, true),
+        section('이번 주', active.filter(i => i.date && i.date <= wk), today, true),
+        section('다음', active.filter(i => i.date && i.date > wk), today, true),
+        section('기한 없음', active.filter(i => !i.date), today, true),
+        section('보류', open.filter(i => i.status === 'hold'), today, true),
+      ]).filter(Boolean);
       if (parts.length) parts.forEach(p => left.append(p));
       else left.append(h('p', { class: 'wempty' }, '남은 할 일이 없어요. 노트에 할 일을 적고 정리하면 여기에 모여요.'));
     } else {
       const carried = work.filter(i => (i.carried || []).includes(view)).sort(byDate);
       left.append(h('h3', null, '다음 달로 넘긴 일', h('b', null, carried.length)));
-      if (carried.length) left.append(h('div', { class: 'wsec' }, h('ul', null, carried.map(i => row(i, today)))));
+      if (carried.length) left.append(h('div', { class: 'wsec' }, h('ul', null, carried.map(i => row(i, today, true)))));
       else left.append(h('p', { class: 'wempty' }, '넘긴 일이 없어요.'));
     }
 
@@ -252,7 +416,7 @@ window.KK = window.KK || {};
     const all = done.concat(meet).sort((a, b) => b.t - a.t);
     right.append(h('h3', null, '한 일', h('b', null, all.length)));
     if (all.length) {
-      right.append(h('div', { class: 'wsec' }, h('ul', null, all.map(x => x.it ? row(x.it, today)
+      right.append(h('div', { class: 'wsec' }, h('ul', null, all.map(x => x.it ? row(x.it, today, true)
         : h('li', { class: 'wrow meet' },
           h('span', { class: 'chk', 'aria-hidden': 'true' }, svg(ICON.note)),
           h('button', { class: 'wmain', onclick: () => KK.minutes.open(x.r) }, h('span', { class: 'wt' }, x.r.minutes.title || x.r.name), h('span', { class: 'wtag' }, h('em', null, '회의록'))),
@@ -314,5 +478,5 @@ window.KK = window.KK || {};
       h('button', { class: 'linkbtn', style: 'margin-left:0', 'aria-label': '안내 닫기', onclick: () => { n.carryHidden = true; db.put(n); renderCarry(); } }, '닫기'));
   }
 
-  KK.work = { init, rollover, render, renderCarry, processMonths, queueMonth, show, ym, curYM, mon, monthLabel, monthText };
+  KK.work = { init, rollover, render, renderCarry, processMonths, queueMonth, show, ym, curYM, mon, monthLabel, monthText, groupNames, groupBtn, openGroup };
 })();

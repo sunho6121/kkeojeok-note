@@ -399,6 +399,7 @@ window.KK = window.KK || {};
     }
     const acts = $('itActions'); acts.textContent = '';
     if (it && KK.edit) acts.append(KK.edit.itemBtn(it)); // 내용 고치기
+    if (it && KK.work && KK.work.groupBtn && (it.type === 'task' || it.type === 'notice')) acts.append(KK.work.groupBtn(it)); // 어느 업무에 묶을지
     if (r.link) acts.append(h('a', { class: 'btn', href: r.link, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '캘린더에서 보기'));
     else if (it && isSched(it)) { const url = gcalUrl(it); if (url) acts.append(h('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener' }, svg(ICON.cal), '구글 캘린더에 추가')); }
     if (r.kind === 'g') acts.append(h('button', { type: 'button', class: 'btn', onclick: () => { $('dlgItem').close(); A().adoptEvent(r.ev); } }, svg(ICON.plus), '끄적노트에서 상태 관리'));

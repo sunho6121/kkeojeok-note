@@ -24,7 +24,7 @@ window.KK = window.KK || {};
 
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 무시 */ } };
-  const cfg = Object.assign({ on: false, email: '', dev: '', cursor: '', last: 0, files: true, err: '', errUrl: '', stats: null }, lsGet(LS_CFG, {}));
+  const cfg = Object.assign({ on: false, email: '', dev: '', cursor: '', last: 0, files: true, err: '', errUrl: '', stats: null, seeded: false }, lsGet(LS_CFG, {}));
   if (!cfg.dev) cfg.dev = 'd' + Math.random().toString(36).slice(2, 9);
   const saveCfg = () => lsSet(LS_CFG, cfg);
   saveCfg();
@@ -432,6 +432,11 @@ window.KK = window.KK || {};
     const doc = await db.get(id);
     if (doc && !KINDS.includes(doc.kind)) { dropMeta(id); return; }
     if (doc && doc.kind === 'rec' && doc.draft) { m.r = t; touch(m); return; } // 저장 확인 전 녹음은 확인한 뒤에(그때 다시 바뀜 표시)
+    if (doc && m.f && m.r != null) { // 마지막으로 맞춘 판과 같으면 할 일 없음
+      const base0 = await getBase(id);
+      const needBlob = BLOB_KINDS.includes(doc.kind) && doc.blob && cfg.files && doc.blob.size <= BLOB_MAX && (!m.bf || m.bs !== doc.blob.size);
+      if (base0 && !needBlob && stable(clean(doc)) === stable(base0)) { if (m.t === t) { m.t = m.r; touch(m); } return; }
+    }
     // 드라이브 쪽이 그사이 바뀌었으면 먼저 받아 합침
     if (m.f || (!m.f && fixedId(id))) {
       let f = null;
@@ -552,8 +557,11 @@ window.KK = window.KK || {};
       notify();
       try {
         await loadMeta();
+        if (!cfg.seeded) await markAll(); // 켠 뒤 처음 끝까지 맞출 때까지: 이 기기 문서를 모두 올릴 대상으로(같은 것은 안 올림)
         const deferred = await pull(changes, stats);
         await push(stats, changes);
+        cfg.seeded = true;
+        if (!cfg.email) { try { const a = await api(API + '/about?fields=' + enc('user(emailAddress)')); cfg.email = (a && a.user && a.user.emailAddress) || ''; } catch (e) { /* 계정 이름 없이도 맞춤 */ } }
         cfg.last = Date.now(); if (cfg.err && cfg.err !== 'scope') { cfg.err = ''; cfg.errMsg = ''; cfg.errUrl = ''; }
         cfg.stats = { got: stats.got, sent: stats.sent, at: cfg.last };
         saveCfg();
@@ -586,21 +594,23 @@ window.KK = window.KK || {};
     if (!ok) return;
     let email = '';
     try { const a = await api(API + '/about?fields=' + enc('user(emailAddress)')); email = (a && a.user && a.user.emailAddress) || ''; }
-    catch (e) { if (e.code === 'api-off' || e.code === 'scope') { cfg.on = true; saveCfg(); handleErr(e); renderBox(); return; } }
+    catch (e) { if (e.code === 'api-off' || e.code === 'scope') { cfg.on = true; cfg.seeded = false; saveCfg(); handleErr(e); renderBox(); return; } }
     await loadMeta();
     if (cfg.email && email && cfg.email !== email) await resetLocal(); // 다른 구글 계정 → 처음부터
     cfg.email = email || cfg.email; cfg.on = true; cfg.err = ''; cfg.errMsg = ''; cfg.errUrl = '';
     saveCfg();
-    // 이 기기의 문서를 모두 올릴 대상으로(내용이 같으면 올리지 않음)
+    cfg.seeded = false; saveCfg(); // 처음 맞출 때 이 기기 문서를 모두 올림(run에서)
+    toast('구글 드라이브와 맞추는 중이에요. 처음에는 조금 걸려요.', null, null, 6000);
+    renderBox();
+    const st = await run('first');
+    if (st && !cfg.err) toast('맞췄어요 · 받은 것 ' + st.got + '개 · 올린 것 ' + st.sent + '개' + (st.files ? ' (녹음·파일 ' + st.files + '개)' : ''), null, null, 6000);
+  }
+  async function markAll() {
     (await db.all()).forEach(d => {
       if (!KINDS.includes(d.kind)) return;
       const m = meta.get(d.id) || { id: d.id };
       m.t = tick(); m.k = d.kind; touch(m);
     });
-    toast('구글 드라이브와 맞추는 중이에요. 처음에는 조금 걸려요.', null, null, 6000);
-    renderBox();
-    const st = await run('first');
-    if (st && !cfg.err) toast('맞췄어요 · 받은 것 ' + st.got + '개 · 올린 것 ' + st.sent + '개' + (st.files ? ' (녹음·파일 ' + st.files + '개)' : ''), null, null, 6000);
   }
   async function resetLocal() {
     meta.clear(); baseCache.clear(); cfg.cursor = '';
@@ -617,18 +627,22 @@ window.KK = window.KK || {};
   }
   // 위쪽 구름 버튼
   function tap() {
-    if (!cfg.on) { if (A()) A().openSettings(); return; }
-    if (!hasToken()) { login(false).then(ok => { if (ok) run('tap'); }); return; }
-    if (cfg.err === 'api-off' || cfg.err === 'scope' || cfg.err === 'full') { if (A()) A().openSettings(); return; }
-    run('tap').then(st => { if (st && !cfg.err) toast(st.got || st.sent ? '맞췄어요 · 받은 것 ' + st.got + '개 · 올린 것 ' + st.sent + '개' : '이미 맞춰져 있어요'); });
+    if (!cfg.on || ['api-off', 'scope', 'full'].includes(cfg.err)) { if (A()) A().openSettings(); return; }
+    syncNow();
+  }
+  function syncNow() {
+    const done = st => { if (st && !cfg.err) toast(st.got || st.sent ? '맞췄어요 · 받은 것 ' + st.got + '개 · 올린 것 ' + st.sent + '개' : '이미 맞춰져 있어요'); };
+    if (!hasToken()) { login(cfg.err === 'scope').then(ok => { if (ok) run('tap').then(done); }); return; }
+    run('tap').then(done);
   }
 
   /* ---------- 화면 ---------- */
   function stateNow() {
     if (!cfg.on) return 'off';
     if (!navigator.onLine) return 'offline';
-    if (!hasToken()) return 'need';
     if (running) return 'busy';
+    if (['api-off', 'scope', 'full'].includes(cfg.err)) return 'err';
+    if (!hasToken()) return 'need';
     if (cfg.err) return 'err';
     return 'ok';
   }
@@ -660,16 +674,16 @@ window.KK = window.KK || {};
       return;
     }
     const s = stateNow(), n = pendingCount();
-    const line = [s === 'need' ? '켜짐 · 다시 로그인 필요(1시간마다)' : s === 'offline' ? '켜짐 · 오프라인' : '켜짐', cfg.email ? '계정 ' + cfg.email : ''].filter(Boolean).join(' · ');
+    const line = [!hasToken() ? '켜짐 · 다시 로그인 필요(1시간마다)' : s === 'offline' ? '켜짐 · 오프라인' : '켜짐', cfg.email ? '계정 ' + cfg.email : '계정 확인 전'].filter(Boolean).join(' · ');
     box.append(h('p', null, line));
-    box.append(h('p', { class: 'hint' }, (s === 'busy' ? '맞추는 중…' : cfg.last ? '마지막으로 맞춘 때 ' + stamp(cfg.last) : '아직 맞추지 않음') + (n ? ' · 올릴 것 ' + n + '개' : '')));
+    box.append(h('p', { class: 'hint' }, (s === 'busy' ? '맞추는 중…' : cfg.last && cfg.seeded ? '마지막으로 맞춘 때 ' + stamp(cfg.last) : '아직 이 기기 노트를 다 올리지 못함 · 「다시 로그인하고 맞추기」를 눌러 주세요') + (n ? ' · 올릴 것 ' + n + '개' : '')));
     if (cfg.err) {
       const p = h('p', { class: 'hint', style: 'color:var(--danger)' }, cfg.errMsg || '맞추기 문제');
       if (cfg.errUrl) p.append(' ', h('a', { href: cfg.errUrl, target: '_blank', rel: 'noopener' }, '설정 화면 열기'));
       box.append(p);
     }
     box.append(h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'btn primary', disabled: s === 'busy' || s === 'offline', onclick: () => tap() }, s === 'need' ? '다시 로그인하고 맞추기' : '지금 맞추기'),
+      h('button', { type: 'button', class: 'btn primary', disabled: s === 'busy' || s === 'offline', onclick: () => syncNow() }, !hasToken() ? '다시 로그인하고 맞추기' : '지금 맞추기'),
       h('button', { type: 'button', class: 'btn danger', onclick: () => disable() }, '이 기기에서 끄기')));
     box.append(h('label', { class: 'chkrow', for: 'syncFiles' },
       h('input', { type: 'checkbox', id: 'syncFiles', checked: cfg.files, onchange: e => { cfg.files = e.target.checked; saveCfg(); if (cfg.files) { markBlobs(); pushSoon(); } } }),
@@ -712,7 +726,7 @@ window.KK = window.KK || {};
   setInterval(() => { notify(); if (hasToken()) auto('poll'); }, 45000);
 
   KK.sync = {
-    cfg, startup, run, tap, enable, disable, renderBox, notify, inCloud, fetchBlobs, hasToken, pendingCount, loadGIS,
+    cfg, startup, run, tap, syncNow, enable, disable, renderBox, notify, inCloud, fetchBlobs, hasToken, pendingCount, loadGIS,
     _t: { merge3, mergeText, mergeStrokes, stable, meta, setToken: (t, exp) => { token = t; tokenExp = exp; lsSet(LS_TOK, t ? { token: t, exp } : null); notify(); } },
   };
 })();

@@ -58,8 +58,11 @@ window.KK = window.KK || {};
       if (L.imported || L.closed || L.month >= cur) return;
       const items = [...S.items.values()].filter(i => i.noteId === L.id && carryable(i, cur));
       if (!(L.body || '').trim() && !L.hasInk && !items.length) { L.month = cur; save.push(L); return; } // 빈 노트는 그대로 이번 달로
+      // 새 달 노트 이름은 정해 둠: 두 기기(태블릿·노트북)가 따로 달을 넘겨도 같은 노트 하나로 맞춰짐 (kk-v28)
+      const nid = 'n-' + String(L.series || L.id).replace(/^n-/, '') + '-' + cur;
+      if (S.notes.has(nid)) return;
       const N = {
-        id: 'n-' + KK.uid(), kind: 'note', title: L.title, titleAuto: L.titleAuto !== false, body: '', summary: [], tags: [],
+        id: nid, kind: 'note', title: L.title, titleAuto: L.titleAuto !== false, body: '', summary: [], tags: [],
         createdAt: now, updatedAt: now, organizedAt: 0, pending: false, hasInk: false,
         month: cur, series: L.series || L.id, prevMonth: L.month, prevNoteId: L.id, carried: items.length,
       };
@@ -69,6 +72,17 @@ window.KK = window.KK || {};
       save.push(L, N, ...items);
       moved[L.id] = N.id;
       ended.add(L.month);
+    });
+    // 다른 기기와 맞춘 뒤: 이미 닫힌 지난달 노트에, 닫기 전에 만든 안 끝난 일이 남아 있으면 이번 달 노트로 (kk-v28)
+    S.notes.forEach(L => {
+      if (!L.closed || !L.nextNoteId || !L.closedAt) return;
+      let N = S.notes.get(L.nextNoteId), guard = 0;
+      while (N && N.closed && N.nextNoteId && S.notes.has(N.nextNoteId) && guard++ < 24) N = S.notes.get(N.nextNoteId);
+      if (!N || N.closed || N.month !== cur) return;
+      [...S.items.values()].forEach(i => {
+        if (i.noteId !== L.id || !carryable(i, cur) || (i.carried || []).includes(L.month) || (i.createdAt || 0) > L.closedAt) return;
+        i.noteId = N.id; i.carried = (i.carried || []).concat(L.month); i.updatedAt = now; save.push(i);
+      });
     });
     if (save.length) db.putMany(save);
     ended.forEach(m => queueMonth(m, false, true));

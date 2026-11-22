@@ -117,6 +117,7 @@ window.KK = window.KK || {};
       const tparts = [];
       for (const a of atts) {
         const k = a.ftype || KK.attach.kindOf(a.name, a.type), n = S.notes.get(a.noteId), from = n ? ' · 노트 「' + KK.views.noteLabel(n) + '」' : '';
+        if ((k === 'pdf' || k === 'image') && !a.blob) { info.skipped.push(a.name + '(이 기기에 파일이 아직 없음)'); continue; }
         if (k === 'pdf') {
           if (a.size > BUDGET.pdf1 || a.size > pLeft) { info.skipped.push(a.name + '(커서 뺌)'); continue; }
           pLeft -= a.size;

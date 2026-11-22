@@ -69,6 +69,8 @@
     const n = curNote(); if (n) db.put(n);
     flushInk();
   }
+  // 저장 안 된 것이 있을 때만 (다른 기기와 맞추기 전)
+  function flushPending() { if (saveTimer || inkDirty) flushSave(); }
 
   function openNote(id) {
     if (id === S.cur && id) { renderEditorTop(); return; }
@@ -124,6 +126,7 @@
   /* 입력 & 정리 신호 */
   let trigTimer = null, topTimer = null;
   function onBodyInput() {
+    lastEditAt = Date.now();
     const n = ensureNote();
     n.body = bodyEl.value; n.updatedAt = Date.now();
     scheduleSave(); checkTrigger();
@@ -154,6 +157,7 @@
   let inkTimer = null, inkDirty = false;
   const ink = KK.createInk($('ink'), {
     onChange() {
+      lastEditAt = Date.now();
       const n = ensureNote();
       n.hasInk = !ink.isEmpty(); n.updatedAt = Date.now();
       inkDirty = true; clearTimeout(inkTimer); inkTimer = setTimeout(flushInk, 600);
@@ -505,6 +509,7 @@
     $('boardAuto').checked = settings.boardAuto !== false; $('boardPull').checked = settings.boardPull !== false; $('boardMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
     V.renderGcalSettings();
+    if (KK.sync) { KK.sync.renderBox(); KK.sync.loadGIS().catch(() => {}); }
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function readSettingsForm() {
@@ -583,6 +588,7 @@
   /* ---------- 이벤트 연결 ---------- */
   bodyEl.addEventListener('input', onBodyInput);
   titleEl.addEventListener('input', () => {
+    lastEditAt = Date.now();
     const n = ensureNote(); n.title = titleEl.value; n.titleAuto = !titleEl.value.trim(); n.updatedAt = Date.now();
     scheduleSave(); clearTimeout(topTimer); topTimer = setTimeout(V.renderChips, 500);
   });
@@ -900,7 +906,68 @@
     });
   }
 
-  KK.app = { S, settings, openNote, newNote, deleteNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings, openSettings };
+  /* ---------- 다른 기기와 맞추기 (sync.js) ---------- */
+  let lastEditAt = 0, composingNow = false, started = false;
+  bodyEl.addEventListener('compositionstart', () => { composingNow = true; });
+  bodyEl.addEventListener('compositionend', () => { composingNow = false; lastEditAt = Date.now(); });
+  // 메모리에 있는 최신 판(노트·일정). 없으면 undefined → 기기 저장소에서 읽음
+  function memDoc(id) {
+    if (S.notes.has(id)) return S.notes.get(id);
+    if (S.items.has(id)) return S.items.get(id);
+    return undefined;
+  }
+  // 지금 쓰고 있는 노트(본문·필기)는 손을 멈출 때까지 다른 기기 판을 넣지 않음
+  function editingNow(id) {
+    if (!S.cur || (id !== S.cur && id !== 'ink-' + S.cur)) return false;
+    return composingNow || inkDirty || !!saveTimer || Date.now() - lastEditAt < 1500;
+  }
+  function showRemoteBody(n) {
+    if (document.activeElement !== titleEl && titleEl.value !== (n.title || '')) titleEl.value = n.title || '';
+    const old = bodyEl.value, text = n.body || '';
+    if (old === text) return;
+    let p = 0; const L = Math.min(old.length, text.length);
+    while (p < L && old[p] === text[p]) p++;
+    let q = 0;
+    while (q < L - p && old[old.length - 1 - q] === text[text.length - 1 - q]) q++;
+    const map = x => (x <= p ? x : x >= old.length - q ? x + text.length - old.length : text.length - q);
+    const focused = document.activeElement === bodyEl, s0 = bodyEl.selectionStart, e0 = bodyEl.selectionEnd, top = bodyEl.scrollTop;
+    bodyEl.value = text;
+    if (focused) bodyEl.setSelectionRange(map(s0), map(e0));
+    if (lastCaret != null) lastCaret = map(lastCaret);
+    bodyEl.scrollTop = top;
+  }
+  // 다른 기기에서 바뀐 문서 → 메모리(같은 객체를 고쳐 다른 곳의 참조도 그대로)와 쓰기 화면
+  function applyRemote(list) {
+    list.forEach(({ id, doc, kind }) => {
+      const k = doc ? doc.kind : kind;
+      if (k === 'note' || k === 'item') {
+        const map = k === 'note' ? S.notes : S.items;
+        if (!doc) { map.delete(id); return; }
+        const o = map.get(id);
+        if (o && o !== doc) { Object.keys(o).forEach(x => { if (!(x in doc)) delete o[x]; }); Object.assign(o, doc); }
+        else if (!o) map.set(id, doc);
+        if (k === 'note' && started && id === S.cur) showRemoteBody(map.get(id));
+      } else if (k === 'ink' && started && S.cur && id === 'ink-' + S.cur) {
+        ink.reset(doc ? doc.strokes : []); inkDirty = false; updatePenHint();
+      }
+    });
+  }
+  // 한 번 맞춘 뒤 화면 다시 그리기
+  function afterRemote(list) {
+    if (!started) return;
+    const kinds = new Set(list.map(x => (x.doc ? x.doc.kind : x.kind)));
+    if (KK.work && (kinds.has('note') || kinds.has('item'))) KK.work.rollover(); // 다른 기기가 보낸 지난달 일도 이번 달로
+    const pick = () => V.notesSorted().find(n => !n.closed) || V.notesSorted()[0];
+    if (S.cur && !S.notes.has(S.cur)) { const next = pick(); openNote(next ? next.id : null); }
+    else if (!S.cur && !bodyEl.value.trim() && S.notes.size) { const next = pick(); if (next) openNote(next.id); } // 처음 맞춘 노트북: 태블릿에서 쓰던 노트 열기
+    renderAll();
+    if (KK.work && kinds.has('month')) KK.work.init().then(() => KK.work.render());
+    if (KK.voice && kinds.has('rec')) KK.voice.refresh();
+    if (KK.attach && kinds.has('att')) KK.attach.refresh();
+  }
+  $('cloudBtn').addEventListener('click', () => { if (KK.sync) KK.sync.tap(); });
+
+  KK.app = { S, settings, flushSave, flushPending, memDoc, editingNow, applyRemote, afterRemote, openNote, newNote, deleteNote, setView, setItemStatus, setItemPriority, bodyEdited, deleteItem, adoptEvent, ensureNote, appendToNote, selectInNote, curNote, renderAll, extractMemos, saveSettings, openSettings };
 
   /* ---------- 시작 ---------- */
   async function loadAll() {
@@ -920,6 +987,7 @@
     await db.init();
     await loadAll();
     if (KK.work) await KK.work.init();
+    if (KK.sync) { try { await KK.sync.startup(); } catch (e) { /* 맞추기 없이도 시작 */ } } // 다른 기기에서 바뀐 것 먼저(최대 3초)
     if (db.usingFallback) $('storeNote').textContent = '이 브라우저는 간이 저장소를 써요. 백업을 자주 받아 두세요.';
     if (!navigator.onLine) window.dispatchEvent(new Event('offline'));
     setMode(lsGet('kk-mode', 'type') === 'pen' ? 'pen' : 'type');
@@ -930,6 +998,7 @@
     openNote(S.notes.has(last) ? last : fallback.id || null);
     renderAll();
     setView('write');
+    started = true;
     await takeShared();
     processQueue();
     if (KK.gcal && KK.gcal.ready() && KK.gcal.hasToken()) KK.gcal.sync();

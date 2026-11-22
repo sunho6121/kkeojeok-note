@@ -445,7 +445,7 @@
       !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
       !r.draft && !r.minutes && r.autoMinutes === 'error' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)' }, '자동 회의록 실패') : null,
       !r.draft && !r.minutes && r.text && r.text.trim() && !(KK.minutes && KK.minutes.isRunning(r.id)) && r.autoMinutes !== 'error' ? h('span', { class: 'chip plain' }, '녹취 글') : null,
-      !r.blob ? h('span', { class: 'chip plain' }, '녹음 파일 없음') : null);
+      !r.blob ? h('span', { class: 'chip plain' }, KK.sync && KK.sync.inCloud(r.id) === 'wait' ? '드라이브에서 받는 중' : KK.sync && KK.sync.inCloud(r.id) ? '녹음 파일은 다른 기기에' : '녹음 파일 없음') : null);
     const meta = h('div', { class: 'it-m' },
       h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + (r.blob ? ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || r.blob.size || 0) : ' · 녹취 글')),
       n ? h('button', { class: 'linkbtn', style: 'margin-left:0;min-height:28px', onclick: () => { A().openNote(n.id); A().setView('write'); } }, '노트: ' + V.noteLabel(n)) : h('span', null, '노트 없음'));

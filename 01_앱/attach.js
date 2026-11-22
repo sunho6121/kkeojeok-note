@@ -144,6 +144,12 @@ window.KK = window.KK || {};
     });
   }
   async function openFile(a) {
+    if (!a.blob) { // 다른 기기에서 맞춰 온 자료: 파일 내용은 아직 안 받음
+      const c = KK.sync ? KK.sync.inCloud(a.id) : '';
+      toast(c === 'wait' ? '구글 드라이브에서 파일을 받는 중이에요. 잠시 뒤 다시 눌러 주세요.' : c ? '파일 내용은 다른 기기에 있어요. 설정 → 노트북과 맞추기에서 「녹음 파일·붙인 파일도 맞추기」를 켜 주세요.' : '이 기기에는 파일 내용이 없어요.');
+      if (c === 'wait') KK.sync.fetchBlobs();
+      return;
+    }
     const file = new File([a.blob], a.name, { type: a.type || a.blob.type || 'application/octet-stream' });
     // 태블릿: 공유 창으로 알맞은 앱(PDF 보기·한컴오피스 등)에서 열기
     if (KK.voice && KK.voice.isAndroid && navigator.canShare && navigator.canShare({ files: [file] })) {

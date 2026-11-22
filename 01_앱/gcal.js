@@ -200,6 +200,8 @@ window.KK = window.KK || {};
       return true;
     }
     if (!want || it.status === 'done' || it.gLinked) return false;
+    const own = events.find(e => e.kk === it.id); // 다른 기기(노트북·태블릿)가 이미 넣은 일정 → 새로 만들지 않음 (kk-v28)
+    if (own) { it.gEventId = own.id; it.gCalId = own.calId; it.gHash = ''; return pushItem(it); }
     const dup = events.find(e => !e.kk && sameEvent(it, e));
     if (dup) { it.gLinked = dup.calId + '|' + dup.id; return true; } // 이미 캘린더(그룹웨어 등)에 있는 일정 → 새로 만들지 않고 연결만
     const body = bodyOf(it), hsh = JSON.stringify(body);

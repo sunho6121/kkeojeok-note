@@ -384,7 +384,7 @@ window.KK = window.KK || {};
       h('button', { class: 'btn ghost nav', 'aria-label': '다음 달', disabled: isCur, onclick: () => { view = addMonth(view, 1); render(); } }, '›'),
       isCur ? null : h('button', { class: 'linkbtn', onclick: () => { view = cur; render(); } }, '이번 달로'),
       isCur && KK.board ? h('button', { class: 'btn', style: 'margin-left:auto', onclick: () => KK.board.openUpload() },
-        '업무보드에 올리기' + (KK.board.candidates().length ? ' · ' + KK.board.candidates().length : '')) : null,
+        '업무보드에 올리기' + (KK.board.candidates().length ? ' · ' + KK.board.candidates().length : '') + (KK.board.dupCount && KK.board.dupCount() ? ' · 겹침 ' + KK.board.dupCount() : '')) : null,
       isCur && KK.board && KK.board.ready() ? boardSyncBtn() : null));
 
     const work = [...S.items.values()].filter(isWork);

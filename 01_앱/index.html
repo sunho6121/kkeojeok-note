@@ -457,6 +457,11 @@ body[data-view="write"] .recpill{display:none}
 .blist .bt{font-size:15px;overflow-wrap:anywhere}
 .blist .bt small{margin-left:8px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .blist select{min-height:38px;font-size:13.5px;max-width:42vw}
+.blist .bsub{display:block;margin-top:3px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.blist .bsub.link{color:var(--accent)}
+.blist .bsub .linkbtn{min-height:28px;margin-left:2px;font-size:12.5px}
+.bdup{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line);border-left:4px solid var(--mark);border-radius:10px;background:var(--sheet);margin-bottom:4px}
+.bdup p{font-size:13px}
 .dlg input#boardKey{font-family:var(--f-mono);font-size:14px}
 /* 업무 탭 — 할 일 / 한 일 / 월간 요약. 단순하게 */
 #vWork{overflow:auto}
@@ -809,11 +814,12 @@ body[data-view="write"] .recpill{display:none}
 <dialog id="dlgBoard" aria-labelledby="bHead">
   <form method="dialog" class="dlg" onsubmit="return false">
     <div class="mtop"><h2 id="bHead">업무보드에 올리기</h2><button type="button" class="btn ghost" id="bClose">닫기</button></div>
-    <p>고른 할 일을 공공보건의료사업팀 업무보드의 <b>업무 목록</b>에 올려요. 올린 뒤에 끄적노트에서 상태(진행·완료 등)나 기한이 바뀌면 보드에도 맞춰져요.</p>
+    <p>고른 할 일을 공공보건의료사업팀 업무보드의 <b>업무 목록</b>에 올려요. 같은 업무·비슷한 일은 한 줄로 합치고, 보드에 이미 있는 같은 업무에는 더해요. 올린 뒤에 끄적노트에서 상태(진행·완료 등)나 기한이 바뀌면 보드에도 맞춰져요.</p>
     <div class="m2">
       <label>담당<input type="text" id="bOwner" maxlength="40" autocomplete="off" placeholder="예: 이름"></label>
       <label>사업 (모두 같을 때)<input type="text" id="bArea" maxlength="40" autocomplete="off" placeholder="예: 인력 양성"></label>
     </div>
+    <div id="bDup"></div>
     <div class="row" style="justify-content:space-between"><b style="font-size:14px">올릴 할 일</b><button type="button" class="linkbtn" id="bAll">모두 선택·해제</button></div>
     <div id="bList"></div>
     <div class="mrun"><button type="button" class="btn primary" id="bGo">보드에 올리기</button><span class="mmsg" id="bMsg"></span></div>

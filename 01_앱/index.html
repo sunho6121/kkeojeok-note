@@ -34,6 +34,8 @@
 
 *,*::before,*::after{box-sizing:border-box}
 html,body{height:100%;margin:0}
+/* 줄이 바뀔 때 한글 낱말(어절)을 자르지 않음. 칸보다 긴 낱말·주소만 잘라 넘김 (kk-v34) */
+body,textarea,input,button,select{word-break:keep-all;overflow-wrap:break-word}
 body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;
   -webkit-tap-highlight-color:transparent;overflow:hidden;display:flex;flex-direction:column;
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}

@@ -16,6 +16,9 @@ src, out = sys.argv[1:3]
 z = zipfile.ZipFile(src)
 head = z.read("Contents/header.xml").decode("utf-8")
 sec = z.read("Contents/section0.xml").decode("utf-8")
+# 한글 줄 나눔을 어절 단위로(낱말이 안 잘리게, kk-v34). 주의: HWPX의 breakNonLatinWord는 이름과 반대로
+#   BREAK_WORD = 어절 단위(낱말 지킴), KEEP_WORD = 글자 단위(낱말 중간에서 잘림). 한글 2024로 그려 확인함
+head = head.replace('breakNonLatinWord="KEEP_WORD"', 'breakNonLatinWord="BREAK_WORD"')
 
 
 def must(pattern, text, flags=re.S):
@@ -41,7 +44,7 @@ def para(pid, align="JUSTIFY", left=0, intent=0, prev=0, line=150):
         f'<hh:paraPr id="{pid}" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="1" '
         'suppressLineNumbers="0" checked="0" textDir="AUTO">'
         f'<hh:align horizontal="{align}" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/>'
-        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="KEEP_WORD" widowOrphan="0" '
+        '<hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" widowOrphan="0" '
         'keepWithNext="0" keepLines="0" pageBreakBefore="0" lineWrap="BREAK"/>'
         '<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>'
         f'<hh:margin><hc:intent value="{intent}" unit="HWPUNIT"/><hc:left value="{left}" unit="HWPUNIT"/>'

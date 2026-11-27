@@ -292,6 +292,7 @@
       else { n.body = (n.body || '').replace(/\s+$/, '') + '\n' + line; n.updatedAt = Date.now(); db.put(n); }
     }
     await refresh();
+    if (KK.stt) KK.stt.onNew(doc, { quiet: !!doc.cut, wait: doc.cut ? 15e3 : 0 }); // kk-v32: 이 기기(또는 노트북)에서 글로 바꿔 회의록까지. 끊긴 녹음은 '이어서 녹음' 알림(10초) 뒤에
     if (doc.cut) toast('녹음을 저장했어요 · 끊긴 뒤부터 이어서 녹음할까요?', '이어서 녹음', () => { if (!recording) startRecording(); }, 10000);
     else toast('녹음을 저장했어요 · 녹음 탭에서 들을 수 있어요', '녹음 탭', () => A().setView('rec'));
   }
@@ -445,6 +446,7 @@
       !r.draft && !r.minutes && KK.minutes && KK.minutes.isRunning(r.id) ? h('span', { class: 'chip wait' }, '회의록 만드는 중…') : null,
       !r.draft && !r.minutes && r.autoMinutes === 'error' ? h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)' }, '자동 회의록 실패') : null,
       !r.draft && !r.minutes && r.text && r.text.trim() && !(KK.minutes && KK.minutes.isRunning(r.id)) && r.autoMinutes !== 'error' ? h('span', { class: 'chip plain' }, '녹취 글') : null,
+      KK.stt ? KK.stt.chip(r) : null,
       !r.blob ? h('span', { class: 'chip plain' }, KK.sync && KK.sync.inCloud(r.id) === 'wait' ? '드라이브에서 받는 중' : KK.sync && KK.sync.inCloud(r.id) ? '녹음 파일은 다른 기기에' : '녹음 파일 없음') : null);
     const meta = h('div', { class: 'it-m' },
       h('span', { class: 'when' }, D.pad(t.getHours()) + ':' + D.pad(t.getMinutes()) + (r.blob ? ' · ' + fmtDur(r.duration || 0) + ' · ' + fmtSize(r.size || r.blob.size || 0) : ' · 녹취 글')),
@@ -464,6 +466,7 @@
         h('button', { type: 'button', class: 'btn', onclick: () => askSave(r) }, '저장할지 정하기'));
     } else {
       acts.append(...[
+        ...(KK.stt ? KK.stt.buttons(r) : []),
         h('button', { type: 'button', class: 'btn', onclick: () => KK.recshare.open([r]) }, svg('<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M7 8l5-5 5 5"/>'), '보내기'),
         h('button', { type: 'button', class: 'btn', onclick: () => KK.minutes.open(r) }, svg(ICON.note), r.minutes ? '회의록 보기' : '회의록 만들기'),
         h('button', { type: 'button', class: 'btn', onclick: () => rename(li, r, list) }, '이름 바꾸기'),
@@ -592,7 +595,7 @@
   $('btnRecord').dataset.title = isAndroid ? '녹음 (끄적노트로 녹음 또는 음성 녹음 앱으로 녹음)' : '소리를 녹음해 이 노트에 저장';
   $('btnRecord').title = $('btnRecord').dataset.title;
   tick(); // 앱을 다시 열었을 때 음성 녹음 앱 녹음 중 표시를 이어서
-  KK.voice = { refresh, renderList, show, search, isAndroid, recTarget, endMark, getMark, recover, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
+  KK.voice = { refresh, renderList, show, search, isAndroid, recTarget, endMark, getMark, recover, busy: () => recording, stopAll() { if (recording) stopRecording(); if (dictating) stopDictation(); } };
 
   // 시작할 때: 앱이 닫혀 끊긴 녹음을 살려 저장할지 묻고, 아니면 저장 여부를 정하지 않은 녹음을 알려 준다
   refresh();

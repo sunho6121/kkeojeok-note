@@ -1,11 +1,11 @@
 /* 끄적노트 — 오프라인 캐시 + 공유받기. 앱 파일을 고치면 VERSION 숫자를 올리세요. */
-const VERSION = 'kk-v31';
+const VERSION = 'kk-v32';
 const SHELL = [
-  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'sync.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'docs.js', 'edit.js', 'attach.js', 'ask.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'recshare.js', 'search.js', 'status.js',
+  './', 'index.html', 'store.js', 'ink.js', 'claude.js', 'ui.js', 'views.js', 'gcal.js', 'sync.js', 'work.js', 'board.js', 'app.js', 'daily.js', 'docs.js', 'edit.js', 'attach.js', 'ask.js', 'voice.js', 'hwpx-tpl.js', 'docgen.js', 'minutes.js', 'recshare.js', 'search.js', 'status.js', 'stt.js', 'stt-worker.js',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
-const KEEP = [VERSION, 'kk-fonts', 'kk-share'];
+const KEEP = [VERSION, 'kk-fonts', 'kk-share', 'kk-vendor'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -56,7 +56,19 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  if (url.origin !== self.location.origin) return; // Claude API 등은 그대로 통과
+  if (url.origin !== self.location.origin) return; // Claude API·모델 파일(허깅페이스) 등은 그대로 통과
+
+  // 녹음 → 글 엔진(vendor/, 폴더 이름에 판이 있어 바뀌지 않음): 처음 쓸 때 받아 버전이 바뀌어도 그대로 보관
+  if (url.pathname.includes('/vendor/')) {
+    e.respondWith(caches.open('kk-vendor').then(async c => {
+      const hit = await c.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok) c.put(req, res.clone());
+      return res;
+    }));
+    return;
+  }
 
   // 안내 문서(docs/): 새 내용 먼저, 인터넷이 없으면 받아 둔 것
   if (url.pathname.includes('/docs/')) {

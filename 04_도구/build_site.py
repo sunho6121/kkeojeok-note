@@ -8,8 +8,10 @@
 usage: python 04_도구/build_site.py [배포 폴더]   (기본: 저장소 맨 위의 _site)
 """
 import json
+import os
 import re
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -23,10 +25,27 @@ def write(p, text):
         f.write(text)
 
 
+def unlock(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def remove(x):
+    # OneDrive 안의 01_앱 폴더(vendor/*)는 읽기 전용 속성이 붙어 있고 복사본에도 따라옴 → Windows에서 지우기가 막힘
+    # → 읽기 전용을 풀고 다시 지움
+    if x.is_dir():
+        shutil.rmtree(x, **({'onexc': unlock} if sys.version_info >= (3, 12) else {'onerror': unlock}))
+    else:
+        try:
+            x.unlink()
+        except PermissionError:
+            unlock(os.unlink, x, None)
+
+
 # 폴더 자체는 두고 안만 비운다(미리 보기 서버가 이 폴더를 열고 있어도 되게)
 OUT.mkdir(parents=True, exist_ok=True)
 for x in OUT.iterdir():
-    shutil.rmtree(x) if x.is_dir() else x.unlink()
+    remove(x)
 shutil.copytree(APP, OUT, dirs_exist_ok=True)
 
 ver = re.search(r"const VERSION = '([^']+)'", (APP / 'sw.js').read_text(encoding='utf-8')).group(1)

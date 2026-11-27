@@ -10,7 +10,7 @@
     notes: new Map(), items: new Map(), cur: null, filter: 'all', sview: 'open', day: null, q: '',
     busy: null, mode: 'type', lastDay: D.today(), showSummary: false,
   };
-  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true, workBy: 'group' };
+  const DEFAULTS = { apiKey: '', model: 'claude-sonnet-5-5', effort: 'high', v: 2, autoMinutes: true, minutesTasks: true, boardUrl: '', boardKey: '', boardOwner: '', boardAuto: true, boardPull: true, workBy: 'group', sttWhere: 'here' };
   const settings = loadSettings();
 
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
@@ -505,6 +505,7 @@
   function openSettings() {
     $('apiKey').value = settings.apiKey; $('model').value = settings.model; $('effort').value = settings.effort; $('keyMsg').textContent = '';
     $('setAutoMin').checked = settings.autoMinutes !== false; $('setMinTasks').checked = settings.minutesTasks !== false;
+    $('sttWhere').value = ['here', 'pc', 'off'].includes(settings.sttWhere) ? settings.sttWhere : 'here'; if (KK.stt) KK.stt.renderBox();
     $('boardUrl').value = settings.boardUrl || (KK.board ? KK.board.DEFAULT_URL : ''); $('boardKey').value = settings.boardKey || ''; $('boardOwner').value = settings.boardOwner || '';
     $('boardAuto').checked = settings.boardAuto !== false; $('boardPull').checked = settings.boardPull !== false; $('boardMsg').textContent = '';
     $('btnDelNote').hidden = !curNote();
@@ -514,7 +515,7 @@
   }
   function readSettingsForm() {
     settings.apiKey = $('apiKey').value.replace(/\s+/g, ''); settings.model = $('model').value; settings.effort = $('effort').value;
-    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked;
+    settings.autoMinutes = $('setAutoMin').checked; settings.minutesTasks = $('setMinTasks').checked; settings.sttWhere = $('sttWhere').value || 'here';
     settings.boardUrl = $('boardUrl').value.trim(); settings.boardKey = $('boardKey').value.replace(/\s+/g, ''); settings.boardOwner = $('boardOwner').value.trim(); settings.boardAuto = $('boardAuto').checked; settings.boardPull = $('boardPull').checked;
     saveSettings();
   }
@@ -706,8 +707,8 @@
   }
   async function importFiles(files, shared) {
     flushSave();
-    const made = [], skipped = [], toMinutes = [];
-    let recs = 0, appended = false, linked = false;
+    const made = [], skipped = [], toMinutes = [], sttNew = [];
+    let recs = 0, appended = false, linked = false, swapped = null;
     // 녹음 파일과 변환 글(글 또는 .txt)을 함께 받으면 둘을 묶어 둔다 → 회의록을 자동으로 만든다
     let pairText = '';
     const hasAudio = files.some(isAudioFile);
@@ -722,14 +723,19 @@
       else if (text && !hasAudio) {
         // 글만 왔을 때: 방금(30분 안) 받은 녹음에 글이 없으면 그 녹음의 변환 글로, 변환 글처럼 보이면 새 녹취 글로
         const tr = looksLikeTranscript(text, title);
-        const audio = await recentRec(d => d.blob && !(d.text || '').trim() && !d.minutes, tr ? 3 * 3600e3 : 30 * 60e3);
+        // 이 기기에서 바꾼 글(textSrc 'stt')이 있는 녹음에도 붙임 → 음성 녹음 앱 변환 글(화자 구분)로 바꿈
+        const audio = await recentRec(d => d.blob && (!(d.text || '').trim() || d.textSrc === 'stt') && (!d.minutes || d.textSrc === 'stt'), tr ? 3 * 3600e3 : 30 * 60e3);
         if (audio || tr) {
           const now = Date.now();
           const rt = KK.voice && KK.voice.recTarget();
           const r = audio || { id: 'rec-' + KK.uid(), kind: 'rec', noteId: rt ? rt.note.id : ensureNote().id, createdAt: now, startAt: guessStart(title, 0) || (rt && rt.at) || 0, duration: 0, mime: '', size: 0,
             name: ((shared && shared.title) || (txts[0] && txts[0].name.replace(/\.[^.]+$/, '')) || '녹취 글 ' + D.stamp(now)).slice(0, 60), draft: false, blob: null, src: 'share-text' };
+          const keepMin = !!(audio && audio.textSrc === 'stt' && audio.minutes); // 바꾼 글로 회의록을 이미 만들었으면 그대로 둠
           r.text = '[녹취록]\n' + text;
-          await db.putRaw(r); recs++; linked = true; toMinutes.push(r);
+          if (audio && (audio.textSrc || audio.sttSt)) { delete r.textSrc; if (r.sttSt !== 'done') r.sttSt = 'skip'; }
+          await db.putRaw(r); recs++; linked = true;
+          if (audio && KK.stt) KK.stt.forget(r.id); // 변환 글이 왔으니 이 기기의 이어 갈 곳은 지움
+          if (keepMin) swapped = r; else toMinutes.push(r);
           files = files.filter(f => !isTextFile(f)); shared = Object.assign({}, shared, { text: '' });
         }
       }
@@ -766,6 +772,7 @@
           if (pairText && !linked) { rec.text = '[녹취록]\n' + pairText; linked = true; toMinutes.push(rec); }
           if (waiting) linked = true;
           await db.putRaw(rec); recs++;
+          if (!waiting && !(rec.text || '').trim()) sttNew.push(rec);
           if (target.id === S.cur && !waiting) appendToNote('[녹음 파일 · ' + rec.name + ']');
           continue;
         }
@@ -799,13 +806,15 @@
         parts.push(!autoOn ? '녹취 글을 받았어요. 녹음 탭에서 회의록을 만들 수 있어요'
           : !settings.apiKey ? '녹취 글을 받았어요. API 키를 넣으면 회의록을 자동으로 만들어요'
             : navigator.onLine ? '녹취 글을 받았어요. Claude가 회의록을 만들고 있어요' : '녹취 글을 받았어요. 인터넷이 연결되면 회의록을 만들어요');
-      } else if (recs) parts.push(linked ? '녹음 파일을 받아 녹취 글과 묶었어요' : '녹음 ' + recs + '개를 녹음 탭에 보관했어요');
+      } else if (swapped) parts.push('변환 글을 「' + (swapped.name || '녹음') + '」에 붙였어요 · 회의록은 그대로예요(다시 만들려면 회의록 창에서)');
+      else if (recs) parts.push(linked ? '녹음 파일을 받아 녹취 글과 묶었어요' : '녹음 ' + recs + '개를 녹음 탭에 보관했어요' + (sttNew.length && KK.stt && KK.stt.plan(true) ? ' · ' + KK.stt.plan(true) : ''));
       toast(parts.join(' · '), recs && appended ? '녹음 탭' : null, () => setView('rec'), 7000);
       if (appended) processQueue();
     } else if (skipped.length) {
       toast('읽을 수 없는 파일이에요. 삼성 노트에서 PDF나 텍스트 파일로 공유해 주세요.', null, null, 6000);
     }
     if (KK.minutes) toMinutes.forEach(r => KK.minutes.auto(r)); // 녹취 글 → 회의록 자동으로
+    if (KK.stt) sttNew.forEach(r => KK.stt.onNew(r, { wait: 120e3 })); // 녹음 파일만 → 2분 기다렸다가 이 기기에서 글로(kk-v32)
   }
   async function takeShared() {
     if (!/[?&]share=1/.test(location.search)) return;
@@ -963,6 +972,7 @@
     renderAll();
     if (KK.work && kinds.has('month')) KK.work.init().then(() => KK.work.render());
     if (KK.voice && kinds.has('rec')) KK.voice.refresh();
+    if (KK.stt && kinds.has('rec')) KK.stt.scanSoon(); // 노트북: '노트북 차례' 녹음을 받으면 글로 바꿈
     if (KK.attach && kinds.has('att')) KK.attach.refresh();
   }
   $('cloudBtn').addEventListener('click', () => { if (KK.sync) KK.sync.tap(); });

@@ -257,7 +257,7 @@
     const text = $('mSrc').value.trim();
     const s = A().settings;
     if (text.length < 20) { setMsg('mMsg', '회의 내용 글이 너무 짧아요. 녹취록이나 메모를 먼저 넣어 주세요.', 'err'); $('mSrc').focus(); return; }
-    if (!s.apiKey) { setMsg('mMsg', '설정에서 Claude API 키를 먼저 넣어 주세요.', 'err'); return; }
+    if (!s.apiKey) { setMsg('mMsg', '이 기기에 Claude API 키가 없어요. 설정에서 넣어 주세요(키는 기기마다 따로 넣어요).', 'err'); return; }
     if (!navigator.onLine) { setMsg('mMsg', '인터넷에 연결되어 있지 않아요. 연결된 뒤 다시 눌러 주세요.', 'err'); return; }
     if (model && !confirm('지금 회의록을 지우고 새로 만들까요? 고친 내용도 사라져요.')) return;
     flushSave();

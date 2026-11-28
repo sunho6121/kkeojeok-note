@@ -4,7 +4,8 @@
      (transformers.js 4.3.2는 config·tokenizer_config 같은 파일을 revision 없이 'main'에서 찾음 → 주소 틀에 판을 박아 둠)
    - 받아 둔 모델을 열 때는 진행 표시를 안 받음 → 크기 확인 요청도 없음(인터넷 없이 열림)
    - 소리(PCM)는 이 기기 안에서만 다룬다. 밖으로 보내는 것은 모델 파일 요청뿐
-   - 실패하면 까닭을 끝까지 남김(kk-v35): 어느 단계(인코더·디코더)에서, GPU가 끊겼는지, GPU가 알린 오류 */
+   - 실패하면 까닭을 끝까지 남김(kk-v35): 어느 단계(인코더·디코더)에서, GPU가 끊겼는지, GPU가 알린 오류
+   - 디코더만 CPU(wasm)로 돌릴 수 있음(kk-v36, dec:'cpu' · ddt:'q8'): 태블릿 GPU가 디코더에서 멈춤(VK_ERROR_DEVICE_LOST) */
 import { AutoProcessor, AutoTokenizer, WhisperForConditionalGeneration, env } from './vendor/transformers-4.3.2/transformers.min.js';
 
 const ORT = new URL('./vendor/ort-1.31.0-dev.20260914/', import.meta.url).href;
@@ -54,7 +55,8 @@ async function free() {
 }
 
 async function load(m) {
-  const k = [m.host, m.model, m.rev, m.dt].join('|');
+  const dec = m.dec === 'cpu' ? 'wasm' : 'webgpu', ddt = m.ddt || m.dt;
+  const k = [m.host, m.model, m.rev, m.dt, dec, ddt].join('|');
   if (model && key === k) { post({ t: 'ready', id: m.id, ms: 0 }); return; }
   await free();
   stage = '';
@@ -78,7 +80,7 @@ async function load(m) {
   const got = await Promise.all([
     AutoProcessor.from_pretrained(m.model, o),
     AutoTokenizer.from_pretrained(m.model, o),
-    WhisperForConditionalGeneration.from_pretrained(m.model, Object.assign({ device: 'webgpu', dtype: { encoder_model: m.dt, decoder_model_merged: m.dt } }, o)),
+    WhisperForConditionalGeneration.from_pretrained(m.model, Object.assign({ device: { encoder_model: 'webgpu', decoder_model_merged: dec }, dtype: { encoder_model: m.dt, decoder_model_merged: ddt } }, o)),
   ]);
   [proc, tok, model] = got;
   watchStages(model);

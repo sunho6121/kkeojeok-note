@@ -5,6 +5,8 @@
    - 디코더(글자 만들기)를 CPU로 돌리는 기기(kk-v36): 퀄컴(Adreno) GPU(태블릿에서 GPU 디코더가 장치를 멈춤 VK_ERROR_DEVICE_LOST),
      이 기기 GPU가 디코더에서 멈춘 적이 있는 기기(kk-stt-dec). 디코더는 q8 모델(약 420MB), 인코더는 그대로 GPU
    - f16이 안 되고 묶음 한도가 172MB보다 작은 GPU는 인코더가 엉뚱한 글을 내서 막음(gpu-small)
+   - 바꾸는 중 GPU가 끊기면(kk-v38, 태블릿은 디코더를 CPU로 돌려도 인코더가 몇 조각 뒤 끊김) 엔진을 닫고 8초 쉰 뒤 멈춘 곳부터 이어서.
+     같은 곳에서 세 번 끊기면(또는 모두 60번) 실패로 둠. 다 바꾸면 걸린 시간·다시 연 횟수를 알림(sttTook·sttLost)
    - 끄적노트로 녹음해 저장하면 바로, 녹음 파일만 공유받으면 2분 기다렸다가(변환 글이 따라오면 그 글을 씀) 글로 바꾸고 회의록(minutes.auto)으로 넘김
    - 말이 쉬는 곳에서 15~28초 조각으로 나눠 차례로 바꾸고, 조각마다 이어 갈 곳을 저장 → 앱이 닫혀도 다음에 이어서
    - 노트북에 맡기기: sttSt='pc' → 맞추기로 녹음을 받은 노트북(안드로이드가 아닌 기기)이 바꿔 글을 돌려줌
@@ -557,7 +559,7 @@
       }
     }
     const ck = loadCk(r.id);
-    job = { id: r.id, name: r.name || '녹음', pos: ck.pos, p0: ck.pos, total: r.duration || 0, t1: 0, stop: false, phase: 'load' };
+    job = { id: r.id, name: r.name || '녹음', pos: ck.pos, p0: ck.pos, total: r.duration || 0, t1: 0, stop: false, phase: 'load', ts: Date.now(), w0: ck.wall || 0, n: 0, enc: 0, dec: 0, hid: false };
     r = await setState(r, { sttSt: 'run', sttBy: dev, sttAt: Date.now(), sttErr: undefined, sttGpu: undefined, sttErrAt: undefined });
     wakeOn();
     if (!r.sttQuiet) toast('「' + job.name + '」 녹음을 글로 바꾸고 있어요' + (A().settings.autoMinutes !== false ? ' · 끝나면 회의록을 만들어요' : '') + ' · 화면을 켜 두세요', '녹음 탭', () => A().setView('rec'), 8000);
@@ -576,12 +578,15 @@
       }
       fresh.text = '[녹취록]\n' + text + (fresh.memo ? '\n\n[녹음하면서 쓴 메모]\n' + fresh.memo : '');
       fresh.textSrc = 'stt'; fresh.sttSt = 'done'; fresh.sttAt = Date.now(); fresh.sttModel = 'whisper-large-v3-turbo ' + label(c);
+      fresh.sttTook = Math.round((job.w0 + Date.now() - job.ts) / 1000); // 처음 시작부터(멈췄다 이은 시간 포함, 기다린 시간 빼고)
+      if (ck.lost) fresh.sttLost = ck.lost; else delete fresh.sttLost;
       delete fresh.sttErr; delete fresh.sttEmpty; delete fresh.sttGpu; delete fresh.sttErrAt;
       await db.putRaw(fresh);
       dropCk(r.id);
       const s = A().settings, auto = s.autoMinutes !== false && KK.minutes;
       if (auto) KK.minutes.auto(fresh);
-      toast('「' + job.name + '」 녹음을 글로 바꿨어요' + (auto ? (s.apiKey ? (navigator.onLine ? ' · 회의록을 만드는 중' : ' · 인터넷이 연결되면 회의록을 만들어요') : ' · API 키를 넣으면 회의록을 만들어요') : ''), '보기', () => KK.minutes.open(fresh), 9000);
+      const took = Math.max(1, Math.round(fresh.sttTook / 60)) + '분 걸림' + (ck.lost ? ' · GPU가 멈춰 ' + ck.lost + '번 다시 엶' : '');
+      toast('「' + job.name + '」 녹음을 글로 바꿨어요(' + took + ')' + (auto ? (s.apiKey ? (navigator.onLine ? ' · 회의록을 만드는 중' : ' · 인터넷이 연결되면 회의록을 만들어요') : ' · API 키를 넣으면 회의록을 만들어요') : ''), '보기', () => KK.minutes.open(fresh), 9000);
       return 'done';
     } catch (e) {
       const fresh = await db.get(r.id);
@@ -596,8 +601,23 @@
         toast('이 기기 GPU가 글자를 만드는 단계에서 멈췄어요 · 그 단계는 CPU로 바꿔 다시 해요', null, null, 9000);
         return 'again';
       }
+      // 그 밖에 바꾸는 중 GPU가 끊기면 엔진을 새로 열어 멈춘 곳부터 이어서(같은 곳에서 세 번이면 실패)
+      const lostNow = e.code === 'engine' && job && job.phase !== 'load' && /DEVICE_LOST|\[GPU 끊김/.test(e.message || '');
+      if (lostNow) {
+        if (ck.pos > (ck.lpos == null ? -1 : ck.lpos)) { ck.lpos = ck.pos; ck.ln = 0; }
+        ck.ln = (ck.ln || 0) + 1; ck.lost = (ck.lost || 0) + 1; ck.wall = job.w0 + Date.now() - job.ts;
+        saveCk(r.id, ck);
+        if (ck.ln <= 2 && ck.lost <= 60) {
+          kill();
+          await setState(fresh, { sttSt: 'wait', sttBy: dev, sttAfter: Date.now() + 8000 });
+          if (ck.lost === 1) toast('이 기기 GPU가 잠깐 멈췄어요 · 엔진을 다시 열어 멈춘 곳부터 이어서 바꿔요', null, null, 8000);
+          return 'again';
+        }
+      }
       const msg = e.code === 'decode' ? e.message : '변환 중 문제가 생겼어요(' + String(e.message || e).slice(0, 1900) + ')';
-      await setState(fresh, { sttSt: 'err', sttErr: msg, sttGpu: [g.info, '모델 ' + label(c), (job && job.phase === 'load' ? '모델 여는 중' : '바꾸는 중 ' + clock((job && job.pos) || 0) + '에서')].filter(Boolean).join(' · '), sttErrAt: Date.now() });
+      const avg = job && job.n ? '조각당 인코더 ' + (job.enc / job.n / 1000).toFixed(1) + '초 · 디코더 ' + (job.dec / job.n / 1000).toFixed(1) + '초' : '';
+      await setState(fresh, { sttSt: 'err', sttErr: msg, sttGpu: [g.info, '모델 ' + label(c), (job && job.phase === 'load' ? '모델 여는 중' : '바꾸는 중 ' + clock((job && job.pos) || 0) + '에서'),
+        avg, ck.lost ? '엔진 다시 연 횟수 ' + ck.lost : '', job && job.hid ? '도중에 화면이 꺼지거나 다른 앱으로 감' : ''].filter(Boolean).join(' · '), sttErrAt: Date.now() });
       if (e.code === 'engine') kill();
       toast(e.code === 'decode' ? '녹음을 글로 바꾸지 못했어요: ' + msg : '녹음을 글로 바꾸지 못했어요 · 카드의 빨간 「글로 바꾸기 실패」를 누르면 까닭을 볼 수 있어요', !isPC() && syncOn() ? '노트북에 맡기기' : null, () => handoff(r.id), 10000);
       return 'done';
@@ -619,13 +639,14 @@
       check();
       if (!quiet(pcm)) {
         const res = await call({ t: 'run', pcm }, [pcm.buffer]);
+        job.n++; job.enc += res.enc || 0; job.dec += res.dec || 0;
         const t = tidy(res.text);
         if (t && t !== last) { lines.push('[' + clock(at / R) + '] ' + t); last = t; }
       }
       const fresh = await db.get(r.id);
       if (!fresh) throw fail('gone');
       if (hasText(fresh) && fresh.textSrc !== 'stt') throw fail('replaced');
-      ck.pos = (at + n) / R; ck.lines = lines; saveCk(r.id, ck);
+      ck.pos = (at + n) / R; ck.lines = lines; ck.wall = job.w0 + Date.now() - job.ts; saveCk(r.id, ck);
       job.pos = ck.pos; paint();
       check();
     };
@@ -655,6 +676,8 @@
     const g = await gpu();
     if (!g.ok) { toast(g.msg, !isPC() && syncOn() ? '노트북에 맡기기' : null, () => handoff(id), 9000); return; }
     laterNow = false;
+    const ck = loadCk(id);
+    if (ck.ln) { ck.ln = 0; saveCk(id, ck); } // 직접 누르면 같은 곳에서도 다시 세 번까지
     await setState(r, { sttSt: 'wait', sttBy: dev, sttAfter: 0, sttErr: undefined, sttQuiet: undefined });
     if (job && job.id !== id) toast('지금 바꾸는 녹음이 끝나면 이어서 바꿔요');
     enqueue(id);
@@ -826,7 +849,7 @@
   }
   function wakeOff() { try { if (wl) wl.release(); } catch (e) { /* 무시 */ } wl = null; }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
+    if (document.visibilityState !== 'visible') { if (job) job.hid = true; return; }
     if (job) wakeOn(); else if (Q.length) pump();
   });
   window.addEventListener('online', () => { if (Q.length) pump(); });

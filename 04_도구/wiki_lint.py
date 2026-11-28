@@ -3,10 +3,11 @@
 - 깨진 링크: [[이름]]이 가리키는 md가 없음
 - index 빠짐: 06_위키 페이지(index·log 제외)나 05_개발기록 파일이 06_위키/index.md에 없음
 - 외톨이: 06_위키 페이지인데 다른 페이지(index·log 제외)에서 아무도 링크하지 않음
-- 양식: 06_위키 페이지에 frontmatter(type·updated)나 '## 관련'이 없음
+- 양식: 06_위키 페이지에 frontmatter(type·updated)나 '## 관련'이 없음, sources가 목록(["…", "…"]) 형식이 아님
 
 usage: python 04_도구/wiki_lint.py      (문제가 없으면 ok, 있으면 목록을 보이고 끝 코드 1)
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -56,6 +57,14 @@ for f in sorted(WIKI.rglob('*.md')):
         problems.append('frontmatter(type·updated) 없음: ' + str(f.relative_to(ROOT)))
     if '\n## 관련' not in text:
         problems.append("'## 관련' 없음: " + str(f.relative_to(ROOT)))
+    src = re.search(r'^sources: (.*)$', text.split('---')[1] if text.startswith('---') else '', re.M)
+    if src:
+        try:
+            ok = isinstance(json.loads(src.group(1)), list)
+        except ValueError:
+            ok = False
+        if not ok:
+            problems.append('sources가 목록 형식이 아님(따옴표 빠짐 등): ' + str(f.relative_to(ROOT)))
 if LOG.exists():
     for f in sorted(LOG.glob('*.md')):
         if f.stem not in listed:

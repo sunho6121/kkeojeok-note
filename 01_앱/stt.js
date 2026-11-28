@@ -6,7 +6,8 @@
    - 말이 쉬는 곳에서 15~28초 조각으로 나눠 차례로 바꾸고, 조각마다 이어 갈 곳을 저장 → 앱이 닫혀도 다음에 이어서
    - 노트북에 맡기기: sttSt='pc' → 맞추기로 녹음을 받은 노트북(안드로이드가 아닌 기기)이 바꿔 글을 돌려줌
    녹음 문서에 두는 상태(맞추기로 오감): sttSt 'wait' 차례 · 'run' 바꾸는 중 · 'pc' 노트북 차례 · 'done' · 'err' · 'stop' 멈춤 · 'skip' 다른 글이 먼저 옴
-   sttBy 맡은 기기, sttAfter 이때부터, textSrc 'stt' = 이 기능으로 만든 녹취 글 */
+   sttBy 맡은 기기, sttAfter 이때부터, textSrc 'stt' = 이 기능으로 만든 녹취 글
+   실패하면 sttErr에 까닭 전체, sttGpu에 이 기기 GPU 정보 → 카드의 실패 표시를 누르면 보임(kk-v35, 터치 화면은 title이 안 보임) */
 (function () {
   const { $, h, toast } = KK.ui;
   const db = KK.db;
@@ -39,13 +40,21 @@
   let gpuP = null;
   function gpu() {
     if (!gpuP) gpuP = (async () => {
-      if (!navigator.gpu) return { ok: false };
+      if (!navigator.gpu) return { ok: false, info: '이 브라우저에 WebGPU 없음' };
       try {
         const ad = await Promise.race([navigator.gpu.requestAdapter(), sleep(8000).then(() => null)]);
-        return ad ? { ok: true, dt: ad.features.has('shader-f16') ? 'q4f16' : 'q4' } : { ok: false };
+        return ad ? { ok: true, dt: ad.features.has('shader-f16') ? 'q4f16' : 'q4', info: gpuInfo(ad) } : { ok: false, info: 'GPU(WebGPU) 장치를 못 찾음' };
       } catch (e) { return { ok: false }; }
     })();
     return gpuP;
+  }
+  // 실패 까닭을 볼 때 함께 보이는 GPU 정보(제조사·종류·f16·한도). 개인정보 없음
+  function gpuInfo(ad) {
+    try {
+      const i = ad.info || {}, L = ad.limits, mb = n => Math.round(n / 1048576) + 'MB';
+      return [(i.vendor || '?') + ' ' + (i.architecture || ''), 'f16 ' + (ad.features.has('shader-f16') ? '됨' : '안 됨'),
+        '묶음 한도 ' + mb(L.maxStorageBufferBindingSize), '버퍼 한도 ' + mb(L.maxBufferSize)].join(' · ').replace(/\s+·/g, ' ·');
+    } catch (e) { return ''; }
   }
   const FILES = dt => ['config.json', 'tokenizer.json', 'onnx/encoder_model_' + dt + '.onnx', 'onnx/decoder_model_merged_' + dt + '.onnx'];
   const fileUrl = f => host() + MODEL + '/resolve/' + REV + '/' + f;
@@ -495,7 +504,7 @@
     const g = await gpu();
     if (!g.ok) {
       // 저절로 돌 때는 알림을 띄우지 않음(녹음 저장 알림·'이어서 녹음' 버튼을 가리지 않게). 카드 표시·설정 칸에 안내, 직접 누르면 start()가 알림
-      await setState(r, { sttSt: 'err', sttErr: 'gpu' });
+      await setState(r, { sttSt: 'err', sttErr: 'gpu', sttGpu: g.info || '' });
       return 'done';
     }
     const dt = g.dt;
@@ -511,7 +520,7 @@
     }
     const ck = loadCk(r.id);
     job = { id: r.id, name: r.name || '녹음', pos: ck.pos, p0: ck.pos, total: r.duration || 0, t1: 0, stop: false, phase: 'load' };
-    r = await setState(r, { sttSt: 'run', sttBy: dev, sttAt: Date.now(), sttErr: undefined });
+    r = await setState(r, { sttSt: 'run', sttBy: dev, sttAt: Date.now(), sttErr: undefined, sttGpu: undefined, sttErrAt: undefined });
     wakeOn();
     if (!r.sttQuiet) toast('「' + job.name + '」 녹음을 글로 바꾸고 있어요' + (A().settings.autoMinutes !== false ? ' · 끝나면 회의록을 만들어요' : '') + ' · 화면을 켜 두세요', '녹음 탭', () => A().setView('rec'), 8000);
     try {
@@ -529,7 +538,7 @@
       }
       fresh.text = '[녹취록]\n' + text + (fresh.memo ? '\n\n[녹음하면서 쓴 메모]\n' + fresh.memo : '');
       fresh.textSrc = 'stt'; fresh.sttSt = 'done'; fresh.sttAt = Date.now(); fresh.sttModel = 'whisper-large-v3-turbo ' + dt;
-      delete fresh.sttErr; delete fresh.sttEmpty;
+      delete fresh.sttErr; delete fresh.sttEmpty; delete fresh.sttGpu; delete fresh.sttErrAt;
       await db.putRaw(fresh);
       dropCk(r.id);
       const s = A().settings, auto = s.autoMinutes !== false && KK.minutes;
@@ -542,10 +551,10 @@
       if (e.code === 'replaced' || (hasText(fresh) && fresh.textSrc !== 'stt')) { await setState(fresh, { sttSt: 'skip' }); dropCk(r.id); return 'done'; }
       if (e.code === 'stop') { await setState(fresh, { sttSt: 'stop' }); toast('글로 바꾸기를 멈췄어요 · 다시 누르면 이어서 바꿔요'); return 'done'; }
       if (job && job.phase === 'load' && !navigator.onLine) { await setState(fresh, { sttSt: 'wait' }); return 'later'; }
-      const msg = e.code === 'decode' ? e.message : '변환 중 문제가 생겼어요(' + String(e.message || e).slice(0, 120) + ')';
-      await setState(fresh, { sttSt: 'err', sttErr: msg });
+      const msg = e.code === 'decode' ? e.message : '변환 중 문제가 생겼어요(' + String(e.message || e).slice(0, 1900) + ')';
+      await setState(fresh, { sttSt: 'err', sttErr: msg, sttGpu: [g.info, '모델 ' + dt, (job && job.phase === 'load' ? '모델 여는 중' : '바꾸는 중 ' + clock((job && job.pos) || 0) + '에서')].filter(Boolean).join(' · '), sttErrAt: Date.now() });
       if (e.code === 'engine') kill();
-      toast('녹음을 글로 바꾸지 못했어요: ' + msg, !isPC() && syncOn() ? '노트북에 맡기기' : null, () => handoff(r.id), 10000);
+      toast(e.code === 'decode' ? '녹음을 글로 바꾸지 못했어요: ' + msg : '녹음을 글로 바꾸지 못했어요 · 카드의 빨간 「글로 바꾸기 실패」를 누르면 까닭을 볼 수 있어요', !isPC() && syncOn() ? '노트북에 맡기기' : null, () => handoff(r.id), 10000);
       return 'done';
     } finally {
       job = null; dl = null; wakeOff();
@@ -670,8 +679,8 @@
     if (r.sttSt === 'pc') return h('span', { class: 'chip plain', title: '노트북에서 끄적노트를 열면 글로 바꿔요(노트북과 맞추기·녹음 파일 맞추기 필요)' }, '노트북에서 바꿀 차례');
     if ((r.sttSt === 'run' || r.sttSt === 'wait') && r.sttBy !== dev) return h('span', { class: 'chip plain' }, '다른 기기에서 글로 바꾸는 중');
     if (r.sttSt === 'wait') return h('span', { class: 'chip plain' }, '글로 바꾸기 기다림');
-    if (r.sttSt === 'err' && r.sttErr === 'gpu') return h('span', { class: 'chip plain', title: errText('gpu') }, '이 기기에서 글로 못 바꿈');
-    if (r.sttSt === 'err') return h('span', { class: 'chip', style: 'background:var(--danger-soft);color:var(--danger)', title: errText(r.sttErr) }, '글로 바꾸기 실패');
+    if (r.sttSt === 'err' && r.sttErr === 'gpu') return h('button', { type: 'button', class: 'chip plain chipbtn', title: errText('gpu'), onclick: () => showErr(r.id) }, '이 기기에서 글로 못 바꿈 ⓘ');
+    if (r.sttSt === 'err') return h('button', { type: 'button', class: 'chip chipbtn', style: 'background:var(--danger-soft);color:var(--danger)', title: '눌러서 까닭 보기', onclick: () => showErr(r.id) }, '글로 바꾸기 실패 ⓘ');
     if (r.sttSt === 'stop') { const p = loadCk(r.id).pos; return h('span', { class: 'chip plain' }, '글로 바꾸기 멈춤' + (p >= 60 ? ' · ' + Math.floor(p / 60) + '분까지' : '')); }
     if (r.sttSt === 'done' && r.sttEmpty) return h('span', { class: 'chip plain' }, '말소리 없음');
     return null;
@@ -682,6 +691,32 @@
     const out = [h('button', { type: 'button', class: 'btn', onclick: () => start(r.id) }, loadCk(r.id).pos ? '이어서 글로 바꾸기' : '글로 바꾸기')];
     if (!isPC() && syncOn() && r.sttSt !== 'pc') out.push(h('button', { type: 'button', class: 'btn', onclick: () => handoff(r.id) }, '노트북에 맡기기'));
     return out;
+  }
+
+  /* ---------- 실패 까닭 보기(카드의 실패 표시를 누르면) ---------- */
+  async function showErr(id) {
+    const r = await db.get(id);
+    if (!r) return;
+    const g = await gpu();
+    const reason = errText(r.sttErr) || '까닭이 남아 있지 않아요';
+    const info = r.sttGpu || g.info || '';
+    const when = r.sttErrAt ? new Date(r.sttErrAt) : null;
+    const all = ['[끄적노트 글로 바꾸기 실패]', reason, info ? '기기: ' + info : '', when ? '때: ' + KK.date.ymd(when) + ' ' + pad(when.getHours()) + ':' + pad(when.getMinutes()) : ''].filter(Boolean).join('\n');
+    const d = h('dialog', { class: 'sttdlg', 'aria-labelledby': 'sttErrHead' });
+    const close = () => { if (d.open) d.close(); d.remove(); };
+    d.append(h('form', { method: 'dialog', class: 'dlg', onsubmit: e => e.preventDefault() },
+      h('h2', { id: 'sttErrHead' }, '글로 바꾸지 못한 까닭'),
+      h('p', { class: 'stterr' }, reason),
+      info ? h('p', { class: 'hint' }, '이 기기: ' + info) : null,
+      h('p', { class: 'hint' }, '이 화면을 찍거나 복사해서 보내 주면 원인을 찾을 수 있어요. 녹음 내용은 들어 있지 않아요.'),
+      h('div', { class: 'row', style: 'justify-content:flex-end' },
+        h('button', { type: 'button', class: 'btn', onclick: async () => {
+          try { await navigator.clipboard.writeText(all); toast('복사했어요'); } catch (e) { toast('복사하지 못했어요. 화면을 찍어 주세요'); }
+        } }, '복사'),
+        h('button', { type: 'button', class: 'btn primary', onclick: close }, '닫기'))));
+    d.addEventListener('cancel', e => { e.preventDefault(); close(); });
+    document.body.append(d);
+    d.showModal();
   }
 
   /* ---------- 처음 한 번 모델 받기 묻기 ---------- */
@@ -712,6 +747,7 @@
     box.textContent = '';
     box.append(line, row);
     const g = await gpu();
+    if (g.info) box.append(h('p', { class: 'hint', id: 'sttGpu' }, 'GPU: ' + g.info));
     if (!g.ok) { line.textContent = '이 기기 브라우저에서는 GPU(WebGPU)를 쓸 수 없어 글로 바꿀 수 없어요.' + (isPC() ? '' : ' 노트북에 맡기기를 고르세요.'); return; }
     const have = await hasModel(g.dt);
     if (job && job.phase === 'load') { line.textContent = '모델 받는 중…'; paint(); return; }
@@ -747,7 +783,7 @@
   });
   window.addEventListener('online', () => { if (Q.length) pump(); });
 
-  KK.stt = { onNew, plan, start, stop, handoff, scan, scanSoon, chip, buttons, renderBox, forget: dropCk,
+  KK.stt = { onNew, plan, start, stop, handoff, scan, scanSoon, chip, buttons, renderBox, showErr, forget: dropCk,
     _t: { mp4Audio, decode, seg, tidy, quietest, quiet, clock, hasModel, gpu, dev, state: () => ({ job: job && Object.assign({}, job), Q: Q.slice(), dl, laterNow }) } };
 
   (A() && A().ready ? A().ready : Promise.resolve()).catch(() => {}).then(() => setTimeout(scan, 4000));

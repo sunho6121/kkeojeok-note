@@ -497,9 +497,28 @@
   $('btnDictate').addEventListener('click', () => (dictating ? stopDictation() : startDictation()));
   /* ---------- 녹음 버튼 → 두 가지 중 고름 (kk-v23) ----------
      ① 끄적노트로 녹음: 앱 안 MediaRecorder, 파일은 녹음 탭에.
-     ② 음성 녹음 앱으로 녹음: 파일은 그 앱에. 웹앱(Chrome)은 BROWSABLE로 열린 앱만 열 수 있어
-        삼성 음성 녹음 앱을 열거나 녹음을 시작하게 할 수 없다 → 사용자가 직접 열고(작업 표시줄·앱 페어),
-        끄적노트는 시작 표시·경과 시간을 보여 주고, 공유받은 녹음·변환 글을 그 노트에 붙인다(app.js importFiles → recTarget). */
+     ② 음성 녹음 앱으로 녹음: 파일은 그 앱에. 끄적노트는 시작 표시·경과 시간을 보여 주고,
+        공유받은 녹음·변환 글을 그 노트에 붙인다(app.js importFiles → recTarget).
+        그 앱 열기(kk-v37): 웹앱(Chrome)은 BROWSABLE로 열린 앱 화면만 열 수 있어 음성 녹음 앱을 바로 부를 수 없음 →
+        Play 스토어의 앱 열기 주소(market://launch?id=)를 거침. 설치된 앱이 열리면 좋고(기기에서 확인할 일),
+        안 되면 Play 스토어 화면(「열기」)이 뜸. 2.5초 동안 화면이 그대로면 직접 여는 법을 알림.
+        녹음 시작(빨간 버튼)은 사용자가 누름 — 다른 앱의 녹음을 시작하게 할 길은 없음 */
+  const REC_APP = 'market://launch?id=com.sec.android.app.voicenote';
+  function openRecApp() {
+    let left = false;
+    const vis = () => { if (document.visibilityState === 'hidden') left = true; };
+    const blur = () => { left = true; }; // 화면 분할이면 숨지 않고 초점만 옮겨 감
+    document.addEventListener('visibilitychange', vis);
+    window.addEventListener('blur', blur);
+    const a = document.createElement('a');
+    a.href = REC_APP;
+    a.click();
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', vis);
+      window.removeEventListener('blur', blur);
+      if (!left) toast('음성 녹음 앱이 열리지 않았어요. 화면 아래 작업 표시줄의 음성 녹음 아이콘을 눌러 열어 주세요', null, null, 9000);
+    }, 2500);
+  }
   const UA = navigator.userAgent || '';
   const isAndroid = /Android/i.test(UA) || (navigator.userAgentData && navigator.userAgentData.platform === 'Android') ||
     (/Linux/i.test(UA) && !/CrOS/i.test(UA) && (navigator.maxTouchPoints || 0) > 1); // 태블릿 Chrome은 '데스크톱 버전'으로 열려 Linux로 보일 때가 많다
@@ -523,7 +542,8 @@
     const n = A().ensureNote(), now = Date.now();
     setMark({ noteId: n.id, at: now });
     noteLine(n, '[녹음 시작 · ' + hhmm(now) + ' · 음성 녹음 앱]');
-    toast('노트에 시작 표시를 했어요. 이제 음성 녹음 앱을 열어 녹음하세요 — 작업 표시줄에서 화면 옆으로 끌어 놓으면 나란히 열려요', null, null, 9000);
+    toast('노트에 시작 표시를 했어요. 음성 녹음 앱에서 빨간 녹음 버튼을 눌러 시작하세요', null, null, 9000);
+    openRecApp();
   }
   // viaShare: 녹음을 공유받아서 끝난 경우(노트에 따로 끝 줄을 적지 않음)
   function endMark(viaShare) {
@@ -572,6 +592,7 @@
   }
   $('rmEnd').addEventListener('click', () => { $('dlgRecMark').close(); endMark(false); toast('녹음 끝을 노트에 적었어요. 음성 녹음 앱에서 공유 → 끄적노트로 보내면 이 노트에 붙어요', null, null, 8000); });
   $('rmClose').addEventListener('click', () => $('dlgRecMark').close());
+  $('rmOpen').addEventListener('click', () => { $('dlgRecMark').close(); openRecApp(); });
   $('recPill').addEventListener('click', () => { if (recording) stopRecording(); else showMarkDlg(); });
 
   function startDlg() {

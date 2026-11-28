@@ -952,13 +952,14 @@ body[data-view="write"] .recpill{display:none}
     <h2 id="rqHead">어떻게 녹음할까요?</h2>
     <div class="rqpick">
       <button type="button" class="rqopt" id="rqWeb"><b>끄적노트로 녹음</b><span>바로 녹음 시작 · 파일은 끄적노트 녹음 탭에 저장<br>노트를 쓰거나 다른 탭을 봐도 계속 녹음 · 녹음 버튼이나 위쪽 ●를 누르면 끝남<br>탭 커버를 닫거나 화면이 꺼진 동안은 소리가 녹음되지 않음</span></button>
-      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음 · 탭 커버를 닫아도 계속 녹음<br>노트에 시작 표시 → 음성 녹음 앱을 직접 열어 녹음 → 끝나면 공유 → 끄적노트</span></button>
+      <button type="button" class="rqopt" id="rqApp"><b>음성 녹음 앱으로 녹음</b><span>파일은 삼성 음성 녹음 앱에 저장 · 긴 회의, 텍스트 변환에 알맞음 · 탭 커버를 닫아도 계속 녹음<br>노트에 시작 표시 → 음성 녹음 앱이 열리면 빨간 버튼으로 녹음 → 끝나면 공유 → 끄적노트</span></button>
     </div>
     <details class="rqhelp" id="rqHelp">
-      <summary>음성 녹음 앱이 저절로 열리지 않는 이유 · 빨리 여는 법</summary>
+      <summary>음성 녹음 앱이 안 열리면 · 나란히 여는 법</summary>
       <ul>
-        <li>끄적노트 같은 웹앱은 보안 규칙상 다른 앱을 열거나 그 앱의 녹음을 시작할 수 없어요</li>
-        <li>화면 아래 작업 표시줄의 음성 녹음 아이콘을 화면 오른쪽 끝으로 끌어 놓으면 화면 분할로 열려요</li>
+        <li>녹음 시작(빨간 버튼)은 음성 녹음 앱에서 직접 눌러요. 웹앱은 다른 앱의 녹음을 시작하게 할 수 없어요</li>
+        <li>Play 스토어 화면이 뜨면 <b>열기</b>를 누르세요</li>
+        <li>아무것도 안 열리면 화면 아래 작업 표시줄의 음성 녹음 아이콘을 누르세요. 화면 오른쪽 끝으로 끌어 놓으면 화면 분할로 열려요</li>
         <li>화면 분할로 두 앱을 연 뒤 가운데 막대의 메뉴에서 '앱 페어'로 저장해 두면, 다음부터 한 번 눌러 두 앱을 나란히 열 수 있어요 (메뉴 이름은 기기마다 조금 다를 수 있어요)</li>
       </ul>
     </details>
@@ -973,13 +974,14 @@ body[data-view="write"] .recpill{display:none}
     <h2 id="rmHead">음성 녹음 앱에서 녹음 중</h2>
     <p id="rmText"></p>
     <ol class="rqtext">
-      <li>음성 녹음 앱에서 녹음을 멈춰요 (필요하면 텍스트 변환)</li>
+      <li>아래 <b>음성 녹음 앱 열기</b>로 그 앱을 열어 녹음을 멈춰요 (필요하면 텍스트 변환)</li>
       <li>녹음 목록에서 그 녹음을 <b>공유 → 끄적노트</b>로 보내요 — 녹음 파일과 변환 글을 함께 보내면 회의록이 자동으로 만들어져요</li>
       <li>녹음을 시작한 노트에 붙어요. 이 표시는 그때 저절로 꺼져요</li>
     </ol>
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn ghost" id="rmClose">닫기</button>
       <button type="button" class="btn" id="rmEnd">녹음 끝 표시</button>
+      <button type="button" class="btn primary" id="rmOpen">음성 녹음 앱 열기</button>
     </div>
   </form>
 </dialog>
